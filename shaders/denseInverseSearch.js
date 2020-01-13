@@ -1,8 +1,8 @@
 const disSearchSource = `#version 310 es
 layout(local_size_x = 32, local_size_y = 32) in;
 
-layout(binding = 0) uniform sampler2D lastColorMap;
-layout(binding = 1) uniform sampler2D nextColorMap;
+layout(binding = 0) uniform highp sampler2D lastColorMap;
+layout(binding = 1) uniform highp sampler2D nextColorMap;
 
 layout(binding = 0, rgba32f) readonly uniform highp image2D lastGradientMap;
 layout(binding = 1, rgba32f) readonly uniform highp image2D flowMap;
@@ -192,7 +192,7 @@ float luminance(vec3 rgb)
 
 void main()
 {         
-	float diff = luminance(textureLod(lastImage, vec2(gl_FragCoord.xy) * invDenseTexSize, level).xyz) - luminance(textureLod(nextImage, vec2(gl_FragCoord.xy * invDenseTexSize) + flow.xy, level).xyz);
+	float diff = luminance(vec3(textureLod(lastImage, vec2(gl_FragCoord.xy) * invDenseTexSize, level).xyz) - luminance(textureLod(nextImage, vec2(gl_FragCoord.xy * invDenseTexSize) + flow.xy, level).xyz));
 	diff -= flow.z;
 	float weight = 1.0f / max(abs(diff), 1.0f);
 	flow_contribution = vec4(flow.x * weight, flow.y * weight, weight, 1.0f);

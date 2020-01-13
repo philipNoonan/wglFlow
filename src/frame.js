@@ -23,7 +23,7 @@ function inverseSearch(gl, level, width, height){
 
   let invDenseSize = [1.0 / (width >> level), 1.0 / (height >> level)];
   let invPrevDenseSize = [1.0 / (width >> (level + 1)), 1.0 / (height >> (level + 1))];  
-  let sparseSize = [(width >> level) / 4.0, (height >> level) / 4.0];
+  let sparseSize = [(width / 4.0) >> level , (height / 4.0) >> level];
 
   gl.useProgram(disSearchProgram);
   gl.uniform1f(gl.getUniformLocation(disSearchProgram, "level"), level);
