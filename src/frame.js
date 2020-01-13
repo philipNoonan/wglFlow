@@ -2,9 +2,9 @@ function calcGradient(gl, level, width, height) {
 
 
     gl.useProgram(edgeDetectProgram);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
-    gl.bindImageTexture(0, gl.gradient_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
+
+    gl.bindImageTexture(0, gl.color_texture, level, false, 0, gl.READ_ONLY, gl.RGBA8UI)
+    gl.bindImageTexture(1, gl.gradient_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
 
     // bind uniforms
     let lesser = 3.0;
@@ -35,10 +35,10 @@ function inverseSearch(gl, level, width, height){
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
 
-  gl.bindImageTexture(0, gl.lastGradient_texture, level, false, 0, gl.READ_ONLY, gl.RGBA32F)
-  gl.bindImageTexture(1, gl.densify_texture, level + 1, false, 0, gl.READ_ONLY, gl.RGBA32F)
-  gl.bindImageTexture(2, gl.sparseFlow_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
-  gl.bindImageTexture(3, gl.densify_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F)
+  gl.bindImageTexture(0, gl.lastGradient_texture, level, false, 0, gl.READ_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(1, gl.densify_texture, level + 1, false, 0, gl.READ_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(2, gl.sparseFlow_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(3, gl.densify_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
 
   gl.dispatchCompute(divup(sparseSize[0], 32), divup(sparseSize[1], 32), 1);
   gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -60,7 +60,7 @@ function densify(gl, level, width, height) {
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE);
 
-  gl.viewport(0,0, width >> level, height >> level);
+  gl.viewport(0, 0, width >> level, height >> level);
 
   gl.useProgram(disDensificationProgram);
 

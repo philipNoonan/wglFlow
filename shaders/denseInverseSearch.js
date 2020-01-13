@@ -13,7 +13,7 @@ layout(binding = 3, rgba32f) writeonly uniform highp image2D flowToWipe;
 
 float luminance(vec3 color)
 {
-  return 0.299 * float(color.x) + 0.587 * float(color.y) + 0.114 * float(color.z);
+  return (0.299f * float(color.x) + 0.587f * float(color.y) + 0.114f * float(color.z));
 }
 
 uniform float level;

@@ -12,11 +12,12 @@ const vertexShaderSource = `#version 310 es
    `;
    
 const fragmentShaderSource = `#version 310 es
-    precision mediump float;
+    precision highp float;
 
-    layout(binding = 0, rgba8ui) readonly uniform mediump uimage2D colorMap;
-    layout(binding = 1, rgba32f) readonly uniform mediump image2D gradMap;
-    layout(binding = 2, rgba32f) readonly uniform mediump image2D flowMap;
+    layout(binding = 0) uniform highp sampler2D colorMap;
+
+    layout(binding = 1, rgba32f) readonly uniform highp image2D gradMap;
+    layout(binding = 2, rgba32f) readonly uniform highp image2D flowMap;
 
     uniform int renderOptions;
     in vec2 t;
@@ -33,14 +34,14 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderColor == 1)
     {
-        vec4 col = vec4(imageLoad(colorMap, ivec2(t_image + 0.5f)));
-        outColor = vec4(col.xyz * 0.00390625f, 1.0f);
+        vec4 col = vec4(texture(colorMap, t));
+        outColor = vec4(col.xyz, 1.0f);
     }
 
     if (renderGrad == 1)
     {
         vec4 col = imageLoad(gradMap, ivec2(t_image + 0.5f));
-        outColor = vec4(abs(col.xy) * 10.0f, 0.0f, 1.0f);
+        outColor = vec4(abs(col.xy) * 1.0f, 0.0f, 1.0f);
     }
 
     if (renderFlow == 1)

@@ -348,9 +348,20 @@
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
         gl.generateMipmap(gl.TEXTURE_2D);
+      }
       
-        let lvl = 0;
-        if (frameCounter > 0) {
+      if (frameCounter > 0) {
+        for (let lvl = 0; lvl < numberOflevels; lvl++) {
+        calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
+        }
+
+        for (let lvl = numberOflevels - 1; lvl >= 0; lvl--) {
+          inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
+          densify(gl, lvl, imageSize[0], imageSize[1]);
+        }
+      }
+
+      if (this.frameAvailableColor && frameCounter > 0) {
           let tempVal = gl.lastColor_texture;
           gl.lastColor_texture = gl.color_texture;
           gl.color_texture = tempVal;
@@ -359,24 +370,7 @@
           gl.lastGradient_texture = gl.gradient_texture;
           gl.gradient_texture = tempVal0;
 
-          // tempVal = gl.lastFlow_texture;
-          // gl.lastFlow_texture = gl.flow_texture;
-          // gl.flow_texture = tempVal;
         }
-      }
-      
-      if (frameCounter > 0) {
-        for (let lvl = 0; lvl < numberOflevels; lvl++) {
-        calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
-        }
-
-        for (let lvl = 0; lvl < numberOflevels - 1; lvl++) {
-          inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
-          densify(gl, lvl, imageSize[0], imageSize[1]);
-        }
-      }
-
-
 
 
       render(gl, c.width, c.height);
