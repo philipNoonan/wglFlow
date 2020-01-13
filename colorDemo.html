@@ -1,0 +1,624 @@
+<html>
+<head>
+</head>
+
+<style>
+  body {
+    display: flex;
+    flex-direction: column;
+    font-family: 'Roboto', 'Noto', sans-serif;
+    line-height: 1.5;
+    background-color: #fbfbfb;
+    margin: 20px;
+  }
+
+  .select {
+    margin: 16px 0px;
+    display: flex;
+    flex-direction: column;
+    max-width: 400px;
+  }
+
+  select {
+    background-color: transparent;
+    width: 100%;
+    padding: 4px 0;
+    font-size: 16px;
+    color: rgba(0,0,0, 0.26);
+    border: none;
+    border-bottom: 1px solid rgba(0,0,0, 0.12);
+  }
+
+  select:focus {
+    outline: none;
+  }
+
+  .select > label {
+    font-size: 10pt;
+    color: gray;
+  }
+
+  #console {
+    color: red;
+    font-size: 150%;
+  }
+
+  canvas {
+    border: 1px solid #cccccd;
+    background-color: white;
+  }
+
+  #tabcontainer {
+    margin: 16px 0px;
+  }
+
+  #tabcontainer input {
+    height: 35px;
+    visibility: hidden;
+  }
+
+  label[for=tab1], label[for=tab2] {
+    color: gray;
+    cursor: pointer;
+    display: block;
+    float: left;
+    height, : 40px;
+    line-height: 40px;
+    margin-right: 5px;
+    padding: 0 20px;
+    text-align: center;
+  }
+  
+  #tabcontainer input:hover + label {
+    background: lightgray;
+    color: gray;
+  }
+
+  #tabcontainer input:checked + label {
+    background: #f0f0f0;
+    color: dimgray;
+    position: relative;
+    z-index: 6;
+  }
+
+  #tabcontent1, #tabcontent2 {
+    background: #f0f0f0;
+    opacity: 0;
+    position: absolute;
+    z-index: -100;
+  }
+
+  #tabcontainer input#tab1:checked ~ #tabcontent #tabcontent1,
+  #tabcontainer input#tab2:checked ~ #tabcontent #tabcontent2 {
+      opacity: 1;
+      z-index: 100;
+  }
+
+  input.visible {
+    visibility: visible !important;
+  }
+
+
+  video-stream {
+    color: dimgray;
+  }
+
+  #synctab {
+    margin: 16px;
+    padding:0px;
+    color: dimgray;
+  }
+
+  label[for=synccanvas] {
+    display:block;    
+  }
+
+  #show-background-video {
+    position: absolute;
+    bottom: 50px;
+    right: 25px;
+    color: gray;
+    z-index: 5;
+    height: 20px;
+    text-align: right;
+  }
+  #show-background-color {
+    position: absolute;
+    bottom: 30px;
+    right: 25px;
+    color: gray;
+    z-index: 5;
+    height: 20px;
+    text-align: right;
+  }
+  #show-video-toggle, #show-color-toggle {
+    visibility: visible !important;
+    height: 15px !important;
+    vertical-align:middle;
+  }
+</style>
+
+<template id="video-stream">
+  <style>
+    :host {
+      display: flex;
+      flex-flow: row wrap;
+    }
+
+    canvas {
+      align-self: center;
+    }
+
+    div {
+      margin: 16px;
+    }
+
+    label {
+      display: block;
+    }
+  </style>
+  <div>
+    <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label>
+    <canvas id="canvasGL" width="1696" height="720"></canvas>
+  </div>
+</template>
+
+<body onload="onLoad()">
+  <h2>wglFlow</h2>
+  <div id="console">
+    <!-- Print error messages here. -->
+  </div>
+  <div class="select">
+    <label for="selectVideoDevice">Capture device with depth stream</label>
+    <select id="selectVideoDevice"></select>
+  </div>
+
+
+  <div id="tabcontainer">
+    <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
+    <div id="tabcontent">
+      <div id = tabcontent1>
+        <video-stream></video-stream>
+      </div>
+  </div>
+
+  <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
+  <script src="node_modules/mathjs/dist/math.js"></script>
+  <script src="node_modules/stats.js/build/stats.min.js"></script>
+
+
+
+  <script src="src/createAndCompileShader.js"></script>
+  <script src="src/createComputeProgram.js"></script>
+  <script src="src/createRenderProgram.js"></script>
+
+  <script src="src/frame.js"></script>
+  <script src="src/generateTexture.js"></script>
+  <script src="src/webcamera.js"></script>
+  <script src="src/render.js"></script>
+
+  <script src="shaders/edgeDetect.js"></script>
+  <script src="shaders/denseInverseSearch.js"></script>
+  <script src="shaders/renderScreen.js"></script>
+  <script src="shaders/getClickedPoint.js"></script>
+  <script src="shaders/ploting.js"></script>
+
+</body>
+
+
+
+
+
+
+
+
+
+<script>
+  let error = window.console.error;
+  window.console.error = (message, ...rest) => {
+    let target = document.querySelector('#console');
+    error.call(window.console, message, ...rest);
+
+    if (message instanceof Error) {
+      message = `${message.name}: ${message.message}`;
+    }
+
+    target.innerHTML += `${message}<br>`;
+  }
+
+
+
+  let tabs = document.getElementsByName("tabs");
+  let videos = {depth: null, color: null};
+
+  let selectedtab = tabs[0];
+  for(let i = 0; i < tabs.length; i++) {
+    tabs[i].onclick = function() {
+      if(this !== selectedtab) {
+        window[selectedtab.dataset.ontaboff](); 
+        selectedtab = this;
+        window[selectedtab.dataset.ontabon](); 
+      }
+    };
+  }
+  
+  function stopVideo(video) {
+    if (video && video.srcObject) {
+      const cs = video.srcObject;
+      for (let track of cs.getTracks()) {
+        track.stop();
+      }
+      video.srcObject = null;
+    }
+  }
+
+
+
+  const videoToggle = document.getElementById("show-video-toggle");
+
+
+  var frameCounter = 0;
+
+  var stats = new Stats();
+  stats.showPanel(0);
+  stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
+  document.body.appendChild(stats.dom);
+
+  // vao
+  var vaoRender;
+
+  var renderProgram;
+
+  var edgeDetectProgram;
+  var disSearchProgram;
+  var disDensificationProgram;
+
+  var imageSize = [640, 480];
+  var numberOflevels = 2;
+
+  function normalize(val, max, min) { return (val - min) / (max - min); }
+	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
+
+
+
+  customElements.define('video-stream', class extends HTMLElement {
+    constructor() {
+      super();
+      const template = document.querySelector('#video-stream');
+      const clone = document.importNode(template.content, true);
+      const shadowRoot = this.attachShadow({ mode: 'open' });
+      this.shadowRoot.appendChild(clone);
+
+      this._frameLoop = this._frameLoop.bind(this);
+
+      this.readBuffer = null;
+      this.readFormat = null;
+    }
+
+
+    connectedCallback() {
+      this.gl = this._configureGLContext();
+
+      this.frameAvailableColor = false;
+
+      this.videoColor = this._createOffscreenVideo();
+      this.videoColor.oncanplay = _ => { this.frameAvailableColor = true; }
+      this.videoColor.addEventListener("play", this._frameLoop);
+
+      let hasTouchListeners = false;
+      const onVideoTouchStart = _ => {
+        hasTouchListeners = false;
+        window.removeEventListener("touchstart", onVideoTouchStart, true);
+        this.videoColor.play();
+      }
+
+      if (this.videoColor && this.videoColor.paused && !hasTouchListeners) {
+        hasTouchListeners = true;
+        window.addEventListener("touchstart", onVideoTouchStart, true);
+      }
+    }
+
+    _createOffscreenVideo() {
+      return Object.assign(document.createElement("video"), {
+        autoplay: true,
+        loop: true,
+        crossOrigin: "anonymous",
+        width: imageSize[0],
+        height: imageSize[1]
+      });
+    }
+    
+    _frameLoopColor() {
+
+    }
+
+    _frameLoop() {
+      const gl = this.gl;
+      stats.begin();
+
+      let c = this.shadowRoot.getElementById("canvasGL");
+
+
+
+
+    
+
+      if (this.frameAvailableColor) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
+        gl.generateMipmap(gl.TEXTURE_2D);
+      
+        let lvl = 0;
+        if (frameCounter > 0) {
+          let tempVal = gl.lastColor_texture;
+          gl.lastColor_texture = gl.color_texture;
+          gl.color_texture = tempVal;
+          
+          tempVal = gl.lastGradient_texture;
+          gl.lastGradient_texture = gl.gradient_texture;
+          gl.gradient_texture = tempVal;
+
+          tempVal = gl.lastFlow_texture;
+          gl.lastFlow_texture = gl.flow_texture;
+          gl.flow_texture = tempVal;
+        }
+      }
+      
+      if (frameCounter > 2) {
+        for (let lvl = 0; lvl < numberOflevels; lvl++) {
+        calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
+        }
+
+        for (let lvl = 0; lvl < numberOflevels - 1; lvl++) {
+          inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
+          densify(gl, lvl, imageSize[0], imageSize[1]);
+        }
+      }
+
+
+
+
+      render(gl, c.width, c.height);
+
+      frameCounter++;
+      stats.end();
+      if (!this.paused)
+        window.requestAnimationFrame(this._frameLoop);
+    }
+
+
+
+
+
+
+    // Creates WebGL/WebGL2 context used to upload depth video to texture,
+    // read the pixels to Float buffer and optionElally render the texture.
+    _configureGLContext() {
+      const canvas = this.shadowRoot.getElementById("canvasGL");
+      const gl = canvas.getContext('webgl2-compute', {antialias: false});
+      if (gl) {
+        // The extension tells us if we can use single component R32F texture format.
+        gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
+      } else {
+        gl = canvas.getContext("webgl");
+        gl.getExtension("OES_texture_float");
+      }
+
+
+
+      // VERTEX FRAGMENT SHADERS
+      renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
+
+      edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
+      disSearchProgram = createComputeProgram(gl, disSearchSource);
+      disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
+
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+
+
+
+      gl.useProgram(renderProgram);
+      vaoRender = gl.createVertexArray();
+      gl.bindVertexArray(vaoRender);
+
+      var vertex_location = gl.getAttribLocation(renderProgram, "v");
+      gl.enableVertexAttribArray(vertex_location);
+
+      var vertex_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vertex_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0,0,1,0,1,1,0,1]), gl.STATIC_DRAW);
+
+      var index_buffer= gl.createBuffer();
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, index_buffer);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,0,2,3]), gl.STATIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
+
+
+      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var topFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.NEAREST, gl.NEAREST);
+
+      var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+
+      //Texture
+
+      var frameBuffers = [];
+
+      for (let lvl = 0; lvl < numberOflevels; lvl++) {
+        var fb = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+
+        let depthTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, depthTexture);
+
+        gl.texImage2D(gl.TEXTURE_2D, lvl, gl.DEPTH_COMPONENT24,
+                        imageSize[0] >> lvl, imageSize[1] >> lvl, 0,
+                        gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, densify_texture, lvl);
+        //gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, topFlow_texture, lvl);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        frameBuffers.push(fb);
+
+      }
+
+
+
+
+
+
+
+
+
+
+      gl.vertex_buffer = vertex_buffer;
+      gl.vertex_location = vertex_location;
+      gl.index_buffer = index_buffer;
+
+      gl.vaoRender = vaoRender;
+
+      gl.color_texture = color_texture;
+      gl.lastColor_texture = lastColor_texture;
+
+      gl.gradient_texture = gradient_texture;
+      gl.lastGradient_texture = lastGradient_texture;
+
+      gl.densify_texture = densify_texture;
+      gl.flow_texture = flow_texture;
+      gl.topFlow_texture = topFlow_texture;
+
+      gl.sparseFlow_texture = sparseFlow_texture;
+
+      gl.render_texture = render_texture;
+
+      gl.frameBuffers = frameBuffers;
+
+
+      return gl;
+    }
+
+    async loadStream(deviceId) {
+      stopVideo(videos.color);
+    
+
+      const getUserMediaColor = () => {
+        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
+        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
+          return webCamera.getColorStream();
+        }
+
+        const constraints = {
+          video: {
+            deviceId: deviceId ? { exact: deviceId } : {}
+          }
+        }
+
+        return navigator.mediaDevices.getUserMediaColor(constraints);
+      }
+
+      try {
+        const streamColor = await getUserMediaColor();
+        this.videoColor.srcObject = streamColor;
+        videos.color = this.videoColor;
+
+        //videos.color = this.videoDepth;
+
+        const tracksColor = streamColor.getVideoTracks()[0];
+        if (tracksColor.getSettings) {
+          this.colorDeviceId = tracksColor.getSettings().deviceId;
+        }
+
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  });
+
+  function populateSelectElement(devices) {
+    const selectEl = document.querySelector('#selectVideoDevice');
+    const videoStreamEl = document.querySelector('video-stream');
+
+    let selected = selectEl.value;
+
+    while (selectEl.firstChild) {
+      selectEl.removeChild(selectEl.firstChild);
+    }
+
+    let selectedDeviceStillExists = false;
+    for (let i = 0; i < devices.length; ++i) {
+      const info = devices[i];
+      if (info.kind !== 'videoinput') {
+        continue;
+      }
+
+      const optionEl = document.createElement('option');
+      optionEl.value = info.deviceId;
+      optionEl.text = info.label || 'camera ' + (selectEl.length + 1);
+      selectEl.appendChild(optionEl);
+
+      if (optionEl.value === selected) {
+        selectedDeviceStillExists = true;
+      }
+    }
+
+    if (selectedDeviceStillExists) {
+      selectEl.value = selected;
+    } else if (!selected) {
+      // If no other device is selected, set the initial selection to depth device.
+      if (videoStreamEl.colorDeviceId) {
+        selectEl.value = videoStreamEl.colorDeviceId;
+      }
+    }
+
+
+  }
+
+  function onLoad() {
+    const videoStreamEl = document.querySelector('video-stream');
+    const selectEl = document.querySelector('#selectVideoDevice');
+
+    selectEl.onchange = async event => {
+      selectEl.disabled = true;
+      const deviceId = event.target.value;
+
+      await videoStreamEl.loadStream(deviceId);
+
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      populateSelectElement(devices);
+      if (selectedtab.value != "basic") {
+        // It is on by default; stop rendering it if not visible.
+        stopBasicTab();
+      }
+
+      selectEl.disabled = false;
+    };
+    selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
+  }
+</script>
+</html>
