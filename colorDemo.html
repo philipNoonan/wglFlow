@@ -173,6 +173,9 @@
     <select id="selectVideoDevice"></select>
   </div>
 
+  <button onclick="clickPoseNet()">Load PoseNet</button>
+  <button onclick="clickBodyPix()">Load BodyPix</button>
+
 
   <div id="tabcontainer">
     <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
@@ -181,6 +184,14 @@
         <video-stream></video-stream>
       </div>
   </div>
+
+  <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0"></script>
+
+
 
   <script src="node_modules/gl-matrix/gl-matrix-min.js"></script>
   <script src="node_modules/mathjs/dist/math.js"></script>
@@ -196,12 +207,17 @@
   <script src="src/generateTexture.js"></script>
   <script src="src/webcamera.js"></script>
   <script src="src/render.js"></script>
+  <script src="src/renderSkeleton.js"></script>
 
+
+  <script src="shaders/copyImage.js"></script>
   <script src="shaders/edgeDetect.js"></script>
   <script src="shaders/denseInverseSearch.js"></script>
   <script src="shaders/renderScreen.js"></script>
   <script src="shaders/getClickedPoint.js"></script>
   <script src="shaders/ploting.js"></script>
+  <script src="shaders/skeleton.js"></script>
+  <script src="shaders/checkIfNewImage.js"></script>
 
 </body>
 
@@ -224,6 +240,70 @@
     }
 
     target.innerHTML += `${message}<br>`;
+  }
+
+  var net;
+  var poseNetLoaded = 0;
+  var firstBodyPoseFound = 0;
+  var bodyPoseFound = 0;
+  var bodyPose;
+
+  var segmentation;
+  var bodyPixLoaded = 0;
+  var bodyMapFound = 0;
+
+  function clickPoseNet() {
+    loadPoseNet();
+  }
+
+  function clickBodyPix() {
+    loadBodyPix();
+  }
+
+  async function loadPoseNet() {
+    net = await posenet.load({
+    architecture: 'ResNet50',
+    outputStride: 32,
+    inputResolution: { width: 257, height: 200 },
+    quantBytes: 2
+    });
+    poseNetLoaded = 1;  
+  }
+
+  async function getBodyPose(image, net) {
+    var bPWorking = 0;
+    if (bodyPoseFound == 0 && bPWorking == 0) {
+      bPWorking = 1;
+      bodyPoseFound = 0;
+      const bP = await net.estimateSinglePose(image, {flipHorizontal: false});
+      bodyPose = JSON.parse(JSON.stringify(bP));
+      bodyPoseFound = 1;
+      bpWorking = 0;
+      if (firstBodyPoseFound == 0) {
+        firstBodyPoseFound = 1;
+      }
+    }
+  }
+
+  async function loadBodyPix() {
+    net = await bodyPix.load({
+      architecture: 'MobileNetV1',
+      outputStride: 16,
+      multiplier: 0.75,
+      quantBytes: 2
+    });
+    bodyPixLoaded = 1;
+
+  }
+
+  async function getBodyMap(image, net) {
+    const seggy = await net.segmentPersonParts(image, {
+      flipHorizontal: false,
+      internalResolution: 'medium',
+      segmentationThreshold: 0.7
+    });
+    segmentation = seggy;
+    bodyMapFound = 1;
   }
 
 
@@ -252,7 +332,9 @@
     }
   }
 
-
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
 
   const videoToggle = document.getElementById("show-video-toggle");
 
@@ -266,14 +348,22 @@
 
   // vao
   var vaoRender;
+  var vaoSkeleton;
 
   var renderProgram;
+  var renderSkeletonProgram;
+  var skelePoints = [];
 
+  var newImage = 1;
+
+
+  var copyImageProgram;
+  var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
   var disDensificationProgram;
 
-  var imageSize = [960, 540];
+  var imageSize = [1280, 720];
   var numberOflevels = 4;
 
   function normalize(val, max, min) { return (val - min) / (max - min); }
@@ -332,9 +422,20 @@
 
     }
 
-    _frameLoop() {
+    async _frameLoop() {
       const gl = this.gl;
       stats.begin();
+
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      if (poseNetLoaded == 1) {
+        getBodyPose(this.videoColor, net);
+      }
+
+      if (bodyPixLoaded == 1) {
+        getBodyMap(this.videoColor, net)
+      }
 
       let c = this.shadowRoot.getElementById("canvasGL");
 
@@ -348,9 +449,15 @@
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
         gl.generateMipmap(gl.TEXTURE_2D);
+
+
+      }
+
+      if (frameCounter > 0) {
+        checkIfNewImage(gl, gl.lastColor_texture, gl.color_texture);
       }
       
-      if (frameCounter > 0) {
+      if (frameCounter > 0 && this.frameAvailableColor && gl.newImage == 1) {
         for (let lvl = 0; lvl < numberOflevels; lvl++) {
         calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
         }
@@ -359,9 +466,77 @@
           inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
           densify(gl, lvl, imageSize[0], imageSize[1]);
         }
+        //gl.newImage = 0;
+
       }
 
-      if (this.frameAvailableColor && frameCounter > 0) {
+
+      if (bodyMapFound == 1) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
+        //var seg = Float32Array.from(segmentation.data);
+
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED_INTEGER, gl.INT, segmentation.data);
+
+        //getFlowFromROI(gl, gl.mask_texture);
+
+        render(gl, c.width, c.height);
+
+      }
+
+
+
+      if (firstBodyPoseFound == 1)
+      {
+        if (bodyPoseFound == 1)
+        {
+          const adjacentKeyPoints =
+          posenet.getAdjacentKeyPoints(bodyPose.keypoints, 0.001);
+          // // adjacentKeyPoints.forEach((keypoints) => {
+          // //   skelePoints.push(keypoints[0].position.x);
+          // //   skelePoints.push(keypoints[0].position.y);
+          // //   //skelePoints.push(keypoints[1].position[0]);
+          // //   //skelePoints.push(keypoints[1].position[1]);
+          // // });
+          //console.log(bodyPose);
+          skelePoints = [];
+          for (let iter = 0; iter < bodyPose.keypoints.length; iter++)
+          {
+            skelePoints.push(bodyPose.keypoints[iter].position.x);
+            skelePoints.push(bodyPose.keypoints[iter].position.y);
+          }
+          bodyPoseFound = 0;
+
+        }
+
+ 
+
+        gl.useProgram(renderSkeletonProgram);
+
+        gl.bindVertexArray(gl.vaoSkeleton);
+        gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
+        gl.viewport(0, 0, c.width / 2.0, c.height);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
+
+        let sp = Float32Array.from(skelePoints);
+
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
+
+        gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
+
+        gl.bindVertexArray(null);
+
+      }
+
+
+
+      if (this.frameAvailableColor && gl.newImage == 1) {
+        //for (let lvl = 0; lvl < numberOflevels; lvl++) {
+       // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
+      //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
+      //  copyImage(gl, gl.lastGrey_texture, gl.grey_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.R32F);
+        //}
           let tempVal = gl.lastColor_texture;
           gl.lastColor_texture = gl.color_texture;
           gl.color_texture = tempVal;
@@ -370,15 +545,21 @@
           gl.lastGradient_texture = gl.gradient_texture;
           gl.gradient_texture = tempVal0;
 
-        }
+          gl.newImage = 0;
+
+      }
 
 
-      render(gl, c.width, c.height);
 
       frameCounter++;
       stats.end();
+
+        //await sleep(30);
+
+
       if (!this.paused)
         window.requestAnimationFrame(this._frameLoop);
+
     }
 
 
@@ -403,11 +584,16 @@
 
       // VERTEX FRAGMENT SHADERS
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
+      renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
 
+      copyImageProgram = createComputeProgram(gl, copyImageSource);
+      checkIfNewImageProgram = createComputeProgram(gl, checkIfNewImageSource);
+      
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
 
+      
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -436,8 +622,24 @@
       gl.bindVertexArray(null);
 
 
-      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
-      var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      gl.useProgram(renderSkeletonProgram);
+      vaoSkeleton = gl.createVertexArray();
+      gl.bindVertexArray(vaoSkeleton);
+
+      let arrSkele = new Float32Array(17 * 2);
+      var skeleton_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, skeleton_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, arrSkele, gl.DYNAMIC_COPY);
+
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
+
+      var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32I, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+
+      var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
+      var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
       var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
       var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
@@ -446,10 +648,15 @@
 
       var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-
       var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR);
 
       var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+      var test_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+
+
+      
+
 
 
       //Texture
@@ -482,6 +689,10 @@
 
       }
 
+      let checkData = new Uint32Array(1);
+      var ssboCheckData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
 
 
 
@@ -489,6 +700,11 @@
 
 
 
+
+
+
+
+      gl.newImage = newImage;
 
 
       gl.vertex_buffer = vertex_buffer;
@@ -496,6 +712,7 @@
       gl.index_buffer = index_buffer;
 
       gl.vaoRender = vaoRender;
+      gl.vaoSkeleton = vaoSkeleton;
 
       gl.color_texture = color_texture;
       gl.lastColor_texture = lastColor_texture;
@@ -510,8 +727,16 @@
 
       gl.render_texture = render_texture;
 
+      gl.test_texture = test_texture;
+
       gl.frameBuffers = frameBuffers;
 
+      gl.skeleton_buffer = skeleton_buffer;
+
+      gl.ssboCheckData = ssboCheckData;
+
+
+      gl.mask_texture = mask_texture;
 
       return gl;
     }

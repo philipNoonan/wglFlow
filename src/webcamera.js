@@ -24,8 +24,8 @@
       const constraints = {
         audio: false,
         video: {
-          width: 960,
-          height: 540,
+          width: 1280,
+          height: 720,
           frameRate: {ideal: 30},
         }
       }

@@ -14,10 +14,14 @@ const vertexShaderSource = `#version 310 es
 const fragmentShaderSource = `#version 310 es
     precision highp float;
 
-    layout(binding = 0) uniform highp sampler2D colorMap;
+    layout(binding = 0) uniform highp isampler2D colorMap;
+    // layout(binding = 1) uniform highp sampler2D lastColorMap;
 
-    layout(binding = 1, rgba32f) readonly uniform highp image2D gradMap;
-    layout(binding = 2, rgba32f) readonly uniform highp image2D flowMap;
+    //layout(binding = 0, r32f) readonly uniform highp image2D colorMap;
+    layout(binding = 1, rgba8ui) readonly uniform highp uimage2D lastColorMap;
+
+    layout(binding = 2, rgba32f) readonly uniform highp image2D gradMap;
+    layout(binding = 3, rgba32f) readonly uniform highp image2D flowMap;
 
     uniform int renderOptions;
     in vec2 t;
@@ -34,14 +38,23 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderColor == 1)
     {
-        vec4 col = vec4(texture(colorMap, t));
-        outColor = vec4(col.xyz, 1.0f);
+        vec4 col = vec4(texelFetch(colorMap, ivec2(t_image + 0.5f), 0));
+
+        //vec4 col = vec4(imageLoad(colorMap, ivec2(t_image + 0.5f)));
+        //vec4 lastcol = vec4(imageLoad(lastColorMap, ivec2(t_image + 0.5f)));
+        //outColor = vec4((col.xyz - lastcol.xyz) / 255.0f, 1.0f);
+        //if (t_image.x > 320.0f)
+        //{
+        //    discard;
+        //}
+        outColor = vec4(col.xyz / 10.0f, 1.0f);
+
     }
 
     if (renderGrad == 1)
     {
         vec4 col = imageLoad(gradMap, ivec2(t_image + 0.5f));
-        outColor = vec4(abs(col.xy) * 1.0f, 0.0f, 1.0f);
+        outColor = vec4(abs(col.xy) * 10.0f, 0.0f, 1.0f);
     }
 
     if (renderFlow == 1)
@@ -61,9 +74,9 @@ const fragmentShaderSource = `#version 310 es
         vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
         vec3 p = abs(fract(ang + K.xyz) * 6.0 - K.www);
         vec3 rgb = mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), mag * 10.0f);
-        if (mag > 0.01)
+        if (mag > 0.001)
         {
-            outColor = vec4((1.0 - rgb), mag > 0.5 ? 1.0 : mag / 0.050);
+            outColor = vec4((1.0 - rgb), 1);
         }
     }
 }

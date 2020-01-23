@@ -16,6 +16,11 @@ float luminance(vec3 color)
   return (0.299f * float(color.x) + 0.587f * float(color.y) + 0.114f * float(color.z));
 }
 
+float uluminance(vec3 color)
+{
+  return (0.299f * float(color.x) + 0.587f * float(color.y) + 0.114f * float(color.z));
+}
+
 uniform float level;
 uniform vec2 invImageSize;
 uniform vec2 invPreviousImageSize;
@@ -55,7 +60,7 @@ void main()
 			H[1][1] += gradData[i][j].y * gradData[i][j].y;
 			H[0][1] += gradData[i][j].x * gradData[i][j].y;
 
-			lastImageData[i][j] = luminance(textureLod(lastColorMap, (vec2(pixCenter + vec2(i, j))) * invImageSize, level).xyz);
+			lastImageData[i][j] = uluminance(textureLod(lastColorMap, (vec2(pixCenter + vec2(i, j))) * invImageSize, level).xyz);
 
 			templateSum += lastImageData[i][j];
 			gradSum += gradData[i][j].xy;
@@ -92,7 +97,7 @@ void main()
 
 	float meanDiff, firstMeanDiff;
 
-	for (int iter = 0; iter < 8; iter++)
+	for (int iter = 0; iter < int(level + 2.0f); iter++)
 	{
 		vec2 du = vec2(0.0f);
 		float warpedSum = 0.0f;
@@ -103,7 +108,7 @@ void main()
 			for (int j = 0; j < int(patchSize); j++)
 			{
 				vec2 tc = pixCenter + vec2(i, j); 
-				float warped = luminance(textureLod(nextColorMap, vec2(tc  * invImageSize) + flowNorm, level).xyz);
+				float warped = uluminance(textureLod(nextColorMap, vec2(tc  * invImageSize) + flowNorm, level).xyz);
 				du += gradData[i][j] * (warped - lastImageData[i][j]);
 				warpedSum += warped;
 
@@ -138,6 +143,7 @@ void main()
     flow *= invImageSize;
 
 	imageStore(sparseFlowMap, pixSparse, vec4(flow, meanDiff, 1.0f));
+
     //out_flow = vec3(u.x, u.y, mean_diff);
 }
 `;
@@ -182,17 +188,17 @@ flat in vec4 flow; // flow.xy, meanDiff.z
 
 out vec4 flow_contribution;
 
-layout(binding = 0) uniform sampler2D lastImage;
-layout(binding = 1) uniform sampler2D nextImage;
+layout(binding = 0) uniform highp sampler2D lastImage;
+layout(binding = 1) uniform highp sampler2D nextImage;
 
-float luminance(vec3 rgb)
+float uluminance(vec3 rgb)
 {
     return (0.299f * float(rgb.x) + 0.587f * float(rgb.y) + 0.114f * float(rgb.z));
 }
 
 void main()
 {         
-	float diff = luminance(vec3(textureLod(lastImage, vec2(gl_FragCoord.xy) * invDenseTexSize, level).xyz) - luminance(textureLod(nextImage, vec2(gl_FragCoord.xy * invDenseTexSize) + flow.xy, level).xyz));
+	float diff = uluminance(textureLod(lastImage, vec2(gl_FragCoord.xy) * invDenseTexSize, level).xyz) - uluminance(textureLod(nextImage, vec2(gl_FragCoord.xy * invDenseTexSize) + flow.xy, level).xyz);
 	diff -= flow.z;
 	float weight = 1.0f / max(abs(diff), 1.0f);
 	flow_contribution = vec4(flow.x * weight, flow.y * weight, weight, 1.0f);

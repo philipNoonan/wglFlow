@@ -17,7 +17,8 @@ self.generateTexture = function (gl, type, format, levels, width, height, depth,
   var texture = gl.createTexture();
 
   gl.bindTexture(type, texture);
-
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1)
+  
   switch (type) {
     case gl.TEXTURE_1D:
       gl.texStorage1D(type, levels, format, width);
