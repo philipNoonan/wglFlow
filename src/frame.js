@@ -157,26 +157,37 @@ function densify(gl, level, width, height) {
 }
 
 
-function getFlowFromROI(gl, maskTex) {
-  gl.useProgram(getFlowFromROIProgram);
+function getFlowFromPart(gl, maskTex) {
+  gl.useProgram(getFlowFromPartProgram);
 
   // using body-pix supplied list of ID pixels indicating chest area
   gl.bindImageTexture(0, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(1, maskTex, 0, false, 0, gl.READ_ONLY, gl.R32I);
 
   // loop for each person detected?
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, maskTex);
 
-    gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 1, gl.ssboChestFlowData);
-
-    gl.dispatchCompute(16, 1, 1);
-    gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  gl.bindBufferBase(gl.SHADER_STORAGE_BUFFER, 0, gl.ssboChestFlowData);
 
 
+  gl.dispatchCompute(16, 1, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-    const outputChestFlowData = new Float32Array(2);
-    gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboChestFlowData);
-    gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputChestFlowData);
-    gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+
+  const outputChestFlowData = new Float32Array(16 * 2);
+  gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, gl.ssboChestFlowData);
+  gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputChestFlowData);
+  gl.memoryBarrier(gl.ALL_BARRIER_BITS);
+
+  let flowX = 0;
+  let flowY = 0;
+  for (let i = 0; i < 32; i += 2) {
+    flowX += outputChestFlowData[i];
+    flowY += outputChestFlowData[i + 1];
+  }
+
+
+
+  return [flowX, flowY];
 
 }

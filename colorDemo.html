@@ -159,7 +159,7 @@
   </style>
   <div>
     <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label>
-    <canvas id="canvasGL" width="1696" height="720"></canvas>
+    <canvas id="canvasGL" width="1696" height="960"></canvas>
   </div>
 </template>
 
@@ -213,6 +213,7 @@
   <script src="shaders/copyImage.js"></script>
   <script src="shaders/edgeDetect.js"></script>
   <script src="shaders/denseInverseSearch.js"></script>
+  <script src="shaders/getFlowFromPart.js"></script>
   <script src="shaders/renderScreen.js"></script>
   <script src="shaders/getClickedPoint.js"></script>
   <script src="shaders/ploting.js"></script>
@@ -251,6 +252,7 @@
   var segmentation;
   var bodyPixLoaded = 0;
   var bodyMapFound = 0;
+  var firstbodyMapFound = 0;
 
   function clickPoseNet() {
     loadPoseNet();
@@ -304,6 +306,10 @@
     });
     segmentation = seggy;
     bodyMapFound = 1;
+    if (firstbodyMapFound == 0)
+    {
+      firstbodyMapFound = 1;
+    }
   }
 
 
@@ -349,18 +355,23 @@
   // vao
   var vaoRender;
   var vaoSkeleton;
+  var vaoPlotting;
 
   var renderProgram;
+  var renderPlottingProgram;
   var renderSkeletonProgram;
   var skelePoints = [];
 
   var newImage = 1;
 
+  var plottingBufferProgram;
 
   var copyImageProgram;
   var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
+  var getFlowFromPartProgram;
+
   var disDensificationProgram;
 
   var imageSize = [1280, 720];
@@ -478,13 +489,63 @@
 
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED_INTEGER, gl.INT, segmentation.data);
 
-        //getFlowFromROI(gl, gl.mask_texture);
+        var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
-        render(gl, c.width, c.height);
+        uploadGraphPoints(gl, sumFlow[1]);
+
+        //console.log(sumFlow[0], sumFlow[1]);
+
+
+
 
       }
 
+      render(gl, c.width, c.height);
 
+
+      if (firstbodyMapFound == 1)
+      { 
+        for (let person = 0; person < segmentation.allPoses.length; person++)
+        {
+          if (segmentation.allPoses[person].score < 0.3) {
+            continue;
+          }
+            if (bodyMapFound == 1)
+            {
+          ////const adjacentKeyPoints =
+          ////posenet.getAdjacentKeyPoints(bodyPose.keypoints, 0.001);
+          // // adjacentKeyPoints.forEach((keypoints) => {
+          // //   skelePoints.push(keypoints[0].position.x);
+          // //   skelePoints.push(keypoints[0].position.y);
+          // //   //skelePoints.push(keypoints[1].position[0]);
+          // //   //skelePoints.push(keypoints[1].position[1]);
+          // // });
+          //console.log(bodyPose);
+
+            skelePoints = [];
+            for (let iter = 0; iter < segmentation.allPoses[person].keypoints.length; iter++)
+            {
+              if (segmentation.allPoses[person].keypoints[iter].score < 0.1) {
+                continue;
+              }
+              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.x);
+              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.y);
+            }
+            bodyPoseFound = 0;
+          }
+          gl.useProgram(renderSkeletonProgram);
+          gl.bindVertexArray(gl.vaoSkeleton);
+          gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
+          gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
+          gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
+          let sp = Float32Array.from(skelePoints);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
+          gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
+          gl.bindVertexArray(null);
+
+          }
+ 
+      }
 
       if (firstBodyPoseFound == 1)
       {
@@ -506,27 +567,16 @@
             skelePoints.push(bodyPose.keypoints[iter].position.y);
           }
           bodyPoseFound = 0;
-
         }
-
- 
-
         gl.useProgram(renderSkeletonProgram);
-
         gl.bindVertexArray(gl.vaoSkeleton);
         gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
-        gl.viewport(0, 0, c.width / 2.0, c.height);
-
+        gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
         gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
-
         let sp = Float32Array.from(skelePoints);
-
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
-
         gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
-
         gl.bindVertexArray(null);
-
       }
 
 
@@ -584,15 +634,19 @@
 
       // VERTEX FRAGMENT SHADERS
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
+      renderPlottingProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
       renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
 
       copyImageProgram = createComputeProgram(gl, copyImageSource);
       checkIfNewImageProgram = createComputeProgram(gl, checkIfNewImageSource);
       
+      plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
+
+
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
-
+      getFlowFromPartProgram = createComputeProgram(gl, getFlowFromPartSource);
       
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -694,14 +748,27 @@
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
 
+      let chestFlowData = new Float32Array(16 * 2);
+      var ssboChestFlowData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
 
 
+      gl.useProgram(renderPlottingProgram);
+      vaoPlotting = gl.createVertexArray();
+      gl.bindVertexArray(vaoPlotting);
+
+      let emptyGraphPoints = new Float32Array(2*1024);
+      var ssboGraphX = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
 
 
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-
-
-
+      gl.bindVertexArray(null);
 
 
       gl.newImage = newImage;
@@ -711,8 +778,11 @@
       gl.vertex_location = vertex_location;
       gl.index_buffer = index_buffer;
 
+
+
       gl.vaoRender = vaoRender;
       gl.vaoSkeleton = vaoSkeleton;
+      gl.vaoPlotting = vaoPlotting;
 
       gl.color_texture = color_texture;
       gl.lastColor_texture = lastColor_texture;
@@ -734,7 +804,8 @@
       gl.skeleton_buffer = skeleton_buffer;
 
       gl.ssboCheckData = ssboCheckData;
-
+      gl.ssboChestFlowData = ssboChestFlowData;
+      gl.ssboGraphX = ssboGraphX;
 
       gl.mask_texture = mask_texture;
 
