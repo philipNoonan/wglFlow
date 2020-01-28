@@ -20,8 +20,39 @@ function copyImage(gl, target, source, level, width, height, format) {
     gl.bindImageTexture(5, source, level, false, 0, gl.READ_ONLY, format);
   }
 
-  gl.dispatchCompute(divup(width, 32), divup(height, 32), 1);
+  gl.dispatchCompute(divup(width >> level, 32), divup(height >> level, 32), 1);
   gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+}
+
+function genMipMap(gl, target, numberOfLevels, width, height, format)
+{
+  gl.useProgram(genMipMapProgram);
+
+  for (let level = 1; level < numberOfLevels; level++)
+  {
+    if (format == gl.RGBA8UI)
+    {
+      gl.uniform1i(gl.getUniformLocation(genMipMapProgram, "imageType"), 0);
+      gl.bindImageTexture(0, target, level, false, 0, gl.WRITE_ONLY, format);
+      gl.bindImageTexture(1, target, level - 1, false, 0, gl.READ_ONLY, format);
+    }
+    else if (format == gl.RGBA32F)
+    {
+      gl.uniform1i(gl.getUniformLocation(genMipMapProgram, "imageType"), 1);
+      gl.bindImageTexture(2, target, level, false, 0, gl.WRITE_ONLY, format);
+      gl.bindImageTexture(3, target, level - 1, false, 0, gl.READ_ONLY, format);
+    }
+    else if (format == gl.R8UI)
+    {
+      gl.uniform1i(gl.getUniformLocation(genMipMapProgram, "imageType"), 2);
+      gl.bindImageTexture(4, target, level, false, 0, gl.WRITE_ONLY, format);
+      gl.bindImageTexture(5, target, level - 1, false, 0, gl.READ_ONLY, format);
+    }
+  
+    gl.dispatchCompute(divup(width >> level, 8), divup(height >> level, 8), 1);
+    gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+  }
+
 }
 
 
@@ -98,6 +129,8 @@ function inverseSearch(gl, level, width, height){
   gl.bindImageTexture(1, gl.densify_texture, level + 1, false, 0, gl.READ_ONLY, gl.RGBA32F);
   gl.bindImageTexture(2, gl.sparseFlow_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
   gl.bindImageTexture(3, gl.densify_texture, level, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.bindImageTexture(4, gl.flow_texture, level, false, 0, gl.READ_ONLY, gl.RGBA32F);
+
   //gl.bindImageTexture(6, gl.lastGrey_texture, level, false, 0, gl.READ_ONLY, gl.R32F);
 
   //gl.dispatchCompute(divup(width >> level, 32), divup(height >> level, 32), 1);

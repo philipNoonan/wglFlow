@@ -43,7 +43,7 @@ const fragmentShaderSource = `#version 310 es
         // ang to rgb taken from https://stackoverflow.com/questions/15095909/from-rgb-to-hsv-in-opengl-glsl
         vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
         vec3 p = abs(fract(ang + K.xyz) * 6.0 - K.www);
-        vec3 rgb = mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), mag * 20.0f);
+        vec3 rgb = mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), mag * 10.0f);
 
         return rgb;
     }

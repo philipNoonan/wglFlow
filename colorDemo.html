@@ -164,6 +164,16 @@
 </template>
 
 <body onload="onLoad()">
+
+  <div id="no-support" style="display: none">
+    <p><mark class="secondary" style="margin-right: 0.5em"></mark> It seems like WebGL 2.0 Compute is not available on your browser. Make sure you are on a system with WebGL 2.0 Compute enabled.</p>
+    <p>Have you tried to open your browser using these arguments ?</p>
+    <p>Windows: </p>
+    <pre>chrome.exe --use-cmd-decoder=passthrough --use-angle=gl --enable-webgl2-compute-context</pre>
+    <p>Linux - USE CHROME DEV: </p>
+    <pre>google-chrome-unstable --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --enable-webgl2-compute-context</pre>
+</div>
+
   <h2>wglFlow</h2>
   <div id="console">
     <!-- Print error messages here. -->
@@ -173,7 +183,7 @@
     <select id="selectVideoDevice"></select>
   </div>
 
-  <button onclick="clickPoseNet()">Load PoseNet</button>
+  <!-- <button onclick="clickPoseNet()">Load PoseNet</button> -->
   <button onclick="clickBodyPix()">Load BodyPix</button>
 
 
@@ -367,6 +377,7 @@
   var plottingBufferProgram;
 
   var copyImageProgram;
+  var genMipMapProgram;
   var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
@@ -374,8 +385,8 @@
 
   var disDensificationProgram;
 
-  var imageSize = [1280, 720];
-  var numberOflevels = 4;
+  var imageSize = [1920, 1080];
+  var numberOflevels = 6;
 
   function normalize(val, max, min) { return (val - min) / (max - min); }
 	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
@@ -444,7 +455,7 @@
         getBodyPose(this.videoColor, net);
       }
 
-      if (bodyPixLoaded == 1) {
+      if (bodyPixLoaded == 1 && (frameCounter % 10) == 0) {
         getBodyMap(this.videoColor, net)
       }
 
@@ -477,6 +488,10 @@
           inverseSearch(gl, lvl, imageSize[0], imageSize[1]);
           densify(gl, lvl, imageSize[0], imageSize[1]);
         }
+
+        copyImage(gl, gl.flow_texture, gl.densify_texture, 0, imageSize[0], imageSize[1], gl.RGBA32F);
+        genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA32F);
+
         //gl.newImage = 0;
 
       }
@@ -622,6 +637,11 @@
     _configureGLContext() {
       const canvas = this.shadowRoot.getElementById("canvasGL");
       const gl = canvas.getContext('webgl2-compute', {antialias: false});
+
+      if (!gl) {
+        document.getElementById("no-support").style.display = 'block';
+        return;
+      }
       if (gl) {
         // The extension tells us if we can use single component R32F texture format.
         gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
@@ -638,6 +658,7 @@
       renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
 
       copyImageProgram = createComputeProgram(gl, copyImageSource);
+      genMipMapProgram = createComputeProgram(gl, genMipMapSource);
       checkIfNewImageProgram = createComputeProgram(gl, checkIfNewImageSource);
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
@@ -700,7 +721,7 @@
 
       var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
 
-      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
 
       var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR);
 

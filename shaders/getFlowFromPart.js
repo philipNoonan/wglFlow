@@ -33,7 +33,16 @@ void main()
 		{
 			vec2 flow = imageLoad(flowMap, ivec2(x, y)).xy;
 			sums[0] += flow.x;
-			sums[1] += flow.y;
+            sums[1] += flow.y;
+            // if (flow.y > 0.0f)
+            // {
+            //     sums[0] += flow.y;
+            // }
+            // else
+            // {
+            //     sums[1] += abs(flow.y);
+            // }
+
 		}
 		else
 		{

@@ -2,7 +2,7 @@
 
     gl.useProgram(plottingBufferProgram);
 
-    let scaledX = normalize(_x, 500, -500);
+    let scaledX = normalize(_x, 5000, -5000);
 
     gl.uniform1f(gl.getUniformLocation(plottingBufferProgram, "newData"), scaledX);
     gl.uniform1i(gl.getUniformLocation(plottingBufferProgram, "pingPong"), frameCounter % 2);
@@ -78,7 +78,7 @@ function render(gl, width, height) {
     gl.bindImageTexture(1, gl.lastColor_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
 
     gl.bindImageTexture(2, gl.gradient_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-    gl.bindImageTexture(3, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
+    gl.bindImageTexture(3, gl.flow_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);

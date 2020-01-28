@@ -10,6 +10,8 @@ layout(binding = 2, rgba32f) writeonly uniform highp image2D sparseFlowMap;
 
 layout(binding = 3, rgba32f) writeonly uniform highp image2D flowToWipe;
 
+layout(binding = 4, rgba32f) readonly uniform highp image2D lastFlowMap;
+
 
 float luminance(vec3 color)
 {
@@ -30,10 +32,19 @@ float EPS = 0.001f;
 
 void main()
 {
+	float patchSize = 8.0f;
+
+
     ivec2 pixSparse = ivec2(gl_GlobalInvocationID.xy);
 	vec2 denseTexSize = vec2(textureSize(lastColorMap, int(level)).xy);
 
 	ivec2 pix = (pixSparse * ivec2(4, 4));
+
+	if (pix.x >= int(denseTexSize.x - patchSize) || pix.y >= int(denseTexSize.y - patchSize))
+	{
+		return;
+	}
+
 	vec2 pixCenter = vec2(pix) + 0.5f;
 
 	float lastImageData[8][8];
@@ -44,7 +55,6 @@ void main()
 	float templateSum = 0.0f;
 	vec2 gradSum = vec2(0.0f);
 
-	float patchSize = 8.0f;
 
 	mat2 H = mat2(0.0f);
 
@@ -52,7 +62,6 @@ void main()
 	{
 		for (int j = 0; j < int(patchSize); j++)
 		{
-		
 			imageStore(flowToWipe, ivec2(pix) + ivec2(i, j), vec4(0.0f));
 			gradData[i][j] = -imageLoad(lastGradientMap, ivec2(pix) + ivec2(i, j)).xy;
 		
@@ -77,7 +86,18 @@ void main()
 	
 	mat2 H_inv = inverse(H);
 
-	vec4 initialFlow = imageLoad(flowMap, pix / 2);
+	vec4 initialFlow = vec4(0.0f);
+	
+	if (level == 5.0f)
+	{
+		initialFlow = imageLoad(lastFlowMap, pix);
+	}
+	else
+	{
+		initialFlow = imageLoad(flowMap, pix / 2);
+		initialFlow.xy *= denseTexSize;
+
+	}
 	
 	if (!isnan(initialFlow.z) || initialFlow.z != 0.0f || isinf(initialFlow.z))
 	{
@@ -91,13 +111,13 @@ void main()
 		initialFlow.xy = vec2(0.0f);
 	}
 
-	initialFlow.xy *= denseTexSize;
 
 	vec2 flow = initialFlow.xy;
 
 	float meanDiff, firstMeanDiff;
+	float minMeanDiff;
 
-	for (int iter = 0; iter < int(level + 2.0f); iter++)
+	for (int iter = 0; iter < int(level + 4.0f); iter++)
 	{
 		vec2 du = vec2(0.0f);
 		float warpedSum = 0.0f;
@@ -107,22 +127,33 @@ void main()
 		{
 			for (int j = 0; j < int(patchSize); j++)
 			{
-				vec2 tc = pixCenter + vec2(i, j); 
-				float warped = uluminance(textureLod(nextColorMap, vec2(tc  * invImageSize) + flowNorm, level).xyz);
+				vec2 tc = (pixCenter + vec2(i, j)) * invImageSize + flowNorm; 
+				if (tc.x < 0.0f || tc.x > 1.0f || tc.y < 0.0f || tc.y > 1.0)
+				{
+					continue;
+				}
+				float warped = uluminance(textureLod(nextColorMap, tc, level).xyz);
 				du += gradData[i][j] * (warped - lastImageData[i][j]);
 				warpedSum += warped;
-
 			}
 		}
 
 		meanDiff = (warpedSum - templateSum) * (1.0f / float(patchSize * patchSize));
-		du -= gradSum * meanDiff;
 
 		if (iter == 0)
 		{
 			firstMeanDiff = meanDiff;
 		}
 
+		if (iter > 0 && (meanDiff > (firstMeanDiff - 0.0001f) || meanDiff < 0.01))
+		{
+			meanDiff = firstMeanDiff;
+			break;
+		}
+
+
+
+		du -= gradSum * meanDiff;
 		flow -= H_inv * du;
 
 	} // loop
@@ -136,10 +167,13 @@ void main()
         denseTexSize.y - newPatchCenter.y < -(patchSize * 0.5f)) {
             flow = initialFlow.xy;
             meanDiff = firstMeanDiff;
-    }
+	}
+	
+
 	
     // NOTE: The mean patch diff will be for the second-to-last patch,
-    // not the true position of du. But hopefully, it will be very close.
+	// not the true position of du. But hopefully, it will be very close.
+	
     flow *= invImageSize;
 
 	imageStore(sparseFlowMap, pixSparse, vec4(flow, meanDiff, 1.0f));
