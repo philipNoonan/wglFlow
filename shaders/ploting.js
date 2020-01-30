@@ -41,11 +41,12 @@ const plottingVertexShaderSource = `#version 310 es
 
     layout (location = 0) in vec2 vX;
     uniform vec2 imageSize;
+    uniform vec2 minmax;
 
     void main()
     {
         int idx = gl_VertexID;
-        float data = vX.x;
+        float data = smoothstep(minmax.x, minmax.y, vX.x);
         gl_Position = vec4((float(idx) / imageSize.x) * 2.0f - 1.0f, 1.0f - (data) * 2.0f, 0, 1);
         gl_PointSize = 5.0;
     }

@@ -184,7 +184,7 @@
   </div>
 
   <!-- <button onclick="clickPoseNet()">Load PoseNet</button> -->
-  <button onclick="clickBodyPix()">Load BodyPix</button>
+  <!-- <button onclick="clickBodyPix()">Load BodyPix</button> -->
 
 
   <div id="tabcontainer">
@@ -200,6 +200,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.0"></script>
+
+  <script type="text/javascript" src="node_modules/dat.gui/build/dat.gui.min.js"></script>
 
 
 
@@ -356,11 +358,36 @@
 
 
   var frameCounter = 0;
+  var runningSum = 0;
+  var runningMin = -5000;
+  var runningMax = 5000;
+  var plottingPoints = [];
 
   var stats = new Stats();
   stats.showPanel(0);
-  stats.domElement.style.cssText = 'position:absolute;top:0px;right:0px;';
+  stats.domElement.style.cssText = 'position:absolute;top:0px;left:0px;';
   document.body.appendChild(stats.dom);
+
+
+  var paramGUI = function() {
+    this.speed = 10;
+    this.clickButton = function() {loadBodyPix()};
+  };
+
+  var spd = 10;
+
+  var gui = new dat.GUI();
+  var param = new paramGUI();
+  gui.open();
+
+  var spdcont = gui.add(param, 'speed', 1, 20);
+  gui.add(param, 'clickButton');
+
+  spdcont.onChange(function(value) {
+    spd = value;
+    //console.log(spd);
+  });
+
 
   // vao
   var vaoRender;
@@ -385,8 +412,10 @@
 
   var disDensificationProgram;
 
-  var imageSize = [1920, 1080];
+  var imageSize = [1280, 720];
   var numberOflevels = 6;
+
+
 
   function normalize(val, max, min) { return (val - min) / (max - min); }
 	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
@@ -455,7 +484,7 @@
         getBodyPose(this.videoColor, net);
       }
 
-      if (bodyPixLoaded == 1 && (frameCounter % 10) == 0) {
+      if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
         getBodyMap(this.videoColor, net)
       }
 
@@ -506,7 +535,16 @@
 
         var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
-        uploadGraphPoints(gl, sumFlow[1]);
+        runningSum += sumFlow[1];
+
+        plottingPoints[frameCounter % 1024] = runningSum;
+        runningMax = Math.max(...plottingPoints);
+        runningMin = Math.min(...plottingPoints);
+
+        let scaledX = normalize(runningSum, runningMax, runningMin);
+
+        uploadGraphPoints(gl, runningSum);
+        //uploadGraphPoints(gl, sumFlow[1]);
 
         //console.log(sumFlow[0], sumFlow[1]);
 
@@ -515,7 +553,7 @@
 
       }
 
-      render(gl, c.width, c.height);
+      render(gl, c.width, c.height, runningMax, runningMin);
 
 
       if (firstbodyMapFound == 1)
@@ -729,7 +767,6 @@
 
       var test_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-
       
 
 
@@ -830,6 +867,7 @@
 
       gl.mask_texture = mask_texture;
 
+
       return gl;
     }
 
@@ -840,7 +878,7 @@
       const getUserMediaColor = () => {
         // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
         if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return webCamera.getColorStream();
+          return webCamera.getColorStream(imageSize[0], imageSize[1]);
         }
 
         const constraints = {
@@ -910,6 +948,10 @@
   }
 
   function onLoad() {
+
+
+
+
     const videoStreamEl = document.querySelector('video-stream');
     const selectEl = document.querySelector('#selectVideoDevice');
 
