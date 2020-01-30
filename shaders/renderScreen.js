@@ -77,8 +77,8 @@ const fragmentShaderSource = `#version 310 es
         }
         else if (mask.x == 0.0f || mask.x == 1.0f)
         {
-            lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
-            outColor = vec4(lastcol.xyz / 255.0f, 1.0f);
+            //lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
+            //outColor = vec4(lastcol.xyz / 255.0f, 1.0f);
         }
 
 

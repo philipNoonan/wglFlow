@@ -17,8 +17,12 @@ void main()
     uint pointB = imageLoad(lastImage, pix + ivec2(10, 0)).x - imageLoad(nextImage, pix + ivec2(10, 0)).x;
     uint pointC = imageLoad(lastImage, pix + ivec2(5, 10)).x - imageLoad(nextImage, pix + ivec2(5, 10)).x;
     uint pointD = imageLoad(lastImage, pix - ivec2(25, 5)).x - imageLoad(nextImage, pix - ivec2(25, 5)).x;
+    uint pointE = imageLoad(lastImage, pix + ivec2(45, 45)).x - imageLoad(nextImage, pix + ivec2(45, 45)).x;
+    uint pointF = imageLoad(lastImage, pix - ivec2(73, 25)).x - imageLoad(nextImage, pix - ivec2(73, 25)).x;
+    uint pointG = imageLoad(lastImage, pix + ivec2(100, 100)).x - imageLoad(nextImage, pix + ivec2(100, 100)).x;
+    uint pointH = imageLoad(lastImage, pix - ivec2(100, 100)).x - imageLoad(nextImage, pix - ivec2(100, 100)).x;
 
-    outData = (pointA + pointB + pointC + pointC);
+    outData = (pointA + pointB + pointC + pointD + pointE + pointF + pointG + pointH);
 }
 
 `;

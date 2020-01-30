@@ -186,6 +186,8 @@
   <!-- <button onclick="clickPoseNet()">Load PoseNet</button> -->
   <!-- <button onclick="clickBodyPix()">Load BodyPix</button> -->
 
+  <input id="myInput" type="file" accept="video/*" style="visibility:hidden" />
+
 
   <div id="tabcontainer">
     <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
@@ -328,6 +330,8 @@
 
   let tabs = document.getElementsByName("tabs");
   let videos = {depth: null, color: null};
+  var videoFF;
+  var videoLoaded = 0;
 
   let selectedtab = tabs[0];
   for(let i = 0; i < tabs.length; i++) {
@@ -371,21 +375,32 @@
 
   var paramGUI = function() {
     this.speed = 10;
-    this.clickButton = function() {loadBodyPix()};
+    this.checkForNewFrames = true;
+    this.loadBP = function() {loadBodyPix()};
+    this.loadFile = function() { 
+            document.getElementById('myInput').click();
+    }
   };
 
   var spd = 10;
+  var checkFramesFlag = true;
 
   var gui = new dat.GUI();
   var param = new paramGUI();
   gui.open();
 
   var spdcont = gui.add(param, 'speed', 1, 20);
-  gui.add(param, 'clickButton');
+  var checkFrames = gui.add(param, 'checkForNewFrames');
+  gui.add(param, 'loadBP').name('Load BodyPix');
+  gui.add(param, 'loadFile').name('Load video file');
 
   spdcont.onChange(function(value) {
     spd = value;
     //console.log(spd);
+  });
+
+  checkFrames.onChange(function(value) {
+    checkFramesFlag = value;
   });
 
 
@@ -421,6 +436,32 @@
 	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
 
 
+  function extractFrames() {
+    videoFF = document.createElement('video');
+
+    function initCanvas(e) {
+      //console.log(this.videoWidth)
+      videoLoaded = 1;
+    }
+
+    function drawFrame(e) {
+      // this.pause();
+
+      // if (this.currentTime < this.duration) {
+      // this.play();
+      //console.log(this.currentTime);
+      //}
+    }
+
+    videoFF.addEventListener('loadedmetadata', initCanvas, false);
+    videoFF.addEventListener('timeupdate', drawFrame, false);
+
+    videoFF.src = URL.createObjectURL(this.files[0]);
+    videoFF.muted = true;
+    videoFF.preload = 'auto';
+    videoFF.loop = true;
+    videoFF.play();
+  }
 
   customElements.define('video-stream', class extends HTMLElement {
     constructor() {
@@ -435,6 +476,9 @@
       this.readBuffer = null;
       this.readFormat = null;
     }
+
+
+
 
 
     connectedCallback() {
@@ -504,11 +548,20 @@
 
       }
 
-      if (frameCounter > 0) {
+      
+      if (videoLoaded == 1) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, videoFF);
+        gl.generateMipmap(gl.TEXTURE_2D);
+      }
+
+      if (checkFramesFlag == true && frameCounter > 0) {
         checkIfNewImage(gl, gl.lastColor_texture, gl.color_texture);
       }
       
-      if (frameCounter > 0 && this.frameAvailableColor && gl.newImage == 1) {
+      if (frameCounter > 0 && this.frameAvailableColor && (gl.newImage == 1 || checkFramesFlag == false)) {
+ 
         for (let lvl = 0; lvl < numberOflevels; lvl++) {
         calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
         }
@@ -524,6 +577,7 @@
         //gl.newImage = 0;
 
       }
+
 
 
       if (bodyMapFound == 1) {
@@ -634,7 +688,7 @@
 
 
 
-      if (this.frameAvailableColor && gl.newImage == 1) {
+      if (this.frameAvailableColor && (gl.newImage == 1 || checkFramesFlag == false)) {
         //for (let lvl = 0; lvl < numberOflevels; lvl++) {
        // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
       //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
@@ -908,6 +962,10 @@
     }
   });
 
+
+
+
+
   function populateSelectElement(devices) {
     const selectEl = document.querySelector('#selectVideoDevice');
     const videoStreamEl = document.querySelector('video-stream');
@@ -947,9 +1005,15 @@
 
   }
 
+
+
+
+
+
   function onLoad() {
 
 
+    document.querySelector('input').addEventListener('change', extractFrames, false);
 
 
     const videoStreamEl = document.querySelector('video-stream');

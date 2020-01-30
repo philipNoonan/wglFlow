@@ -73,8 +73,8 @@ function checkIfNewImage(gl, lastImage, nextImage)
   gl.getBufferSubData(gl.SHADER_STORAGE_BUFFER, 0, outputCheckData);
   gl.memoryBarrier(gl.ALL_BARRIER_BITS);
 
-  gl.newImage = outputCheckData == 0 ? 0 : 1;
-  //console.log(outputCheckData);
+  gl.newImage = outputCheckData < 1 ? 0 : 1;
+  console.log(outputCheckData);
 
   
 }
