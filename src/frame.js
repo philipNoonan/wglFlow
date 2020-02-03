@@ -74,7 +74,7 @@ function checkIfNewImage(gl, lastImage, nextImage)
   gl.memoryBarrier(gl.ALL_BARRIER_BITS);
 
   gl.newImage = outputCheckData < 1 ? 0 : 1;
-  console.log(outputCheckData);
+  //console.log(outputCheckData);
 
   
 }

@@ -14,7 +14,7 @@ const vertexShaderSource = `#version 310 es
 const fragmentShaderSource = `#version 310 es
     precision highp float;
 
-    layout(binding = 0) uniform highp isampler2D maskMap;
+    layout(binding = 0) uniform highp sampler2D maskMap;
     //layout(binding = 1) uniform highp sampler2D lastColorTex;
 
     //layout(binding = 0, r32f) readonly uniform highp image2D colorMap;

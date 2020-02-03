@@ -303,9 +303,9 @@
 
   async function loadBodyPix() {
     net = await bodyPix.load({
-      architecture: 'MobileNetV1',
+      architecture: 'ResNet50',
       outputStride: 16,
-      multiplier: 0.75,
+      multiplier: 1.0,
       quantBytes: 2
     });
     bodyPixLoaded = 1;
@@ -313,10 +313,15 @@
   }
 
   async function getBodyMap(image, net) {
-    const seggy = await net.segmentPersonParts(image, {
+    const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.7
+      segmentationThreshold: 0.7,
+      maxDetections: 10,
+      scoreThreshold: 0.2,
+      nmsRadius: 20,
+      minKeypointScore: 0.3,
+      refineSteps: 10
     });
     segmentation = seggy;
     bodyMapFound = 1;
@@ -413,6 +418,7 @@
   var renderPlottingProgram;
   var renderSkeletonProgram;
   var skelePoints = [];
+  var skeleLines = [];
 
   var newImage = 1;
 
@@ -427,7 +433,7 @@
 
   var disDensificationProgram;
 
-  var imageSize = [1280, 720];
+  var imageSize = [640, 480];
   var numberOflevels = 6;
 
 
@@ -441,7 +447,9 @@
 
     function initCanvas(e) {
       //console.log(this.videoWidth)
-      videoLoaded = 1;
+      //videoLoaded = 1;
+      videoFF.width = imageSize[0];
+      videoFF.height = imageSize[1];
     }
 
     function drawFrame(e) {
@@ -453,13 +461,19 @@
       //}
     }
 
+    function loadedData(e) {
+      videoLoaded = 1;
+    }
+
     videoFF.addEventListener('loadedmetadata', initCanvas, false);
+    videoFF.addEventListener('loadeddata', loadedData, false);
     videoFF.addEventListener('timeupdate', drawFrame, false);
 
     videoFF.src = URL.createObjectURL(this.files[0]);
     videoFF.muted = true;
     videoFF.preload = 'auto';
     videoFF.loop = true;
+    videoFF.crossOrigin = 'anonymous';
     videoFF.play();
   }
 
@@ -528,9 +542,18 @@
         getBodyPose(this.videoColor, net);
       }
 
-      if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
-        getBodyMap(this.videoColor, net)
+      if (videoLoaded == 0)
+      {
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
+          getBodyMap(this.videoColor, net)
+        }
       }
+      else {
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
+          getBodyMap(videoFF, net)
+        }
+      }
+
 
       let c = this.shadowRoot.getElementById("canvasGL");
 
@@ -584,9 +607,11 @@
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
         //var seg = Float32Array.from(segmentation.data);
-
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED_INTEGER, gl.INT, segmentation.data);
-
+        for (let person = 0; person < segmentation.length; person++) {
+          if (segmentation[person].pose.score > 0.3) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
+          }
+        }
         var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
         runningSum += sumFlow[1];
@@ -612,34 +637,48 @@
 
       if (firstbodyMapFound == 1)
       { 
-        for (let person = 0; person < segmentation.allPoses.length; person++)
+        for (let person = 0; person < segmentation.length; person++)
         {
-          if (segmentation.allPoses[person].score < 0.3) {
+          if (segmentation[person].pose.score < 0.3) {
             continue;
           }
             if (bodyMapFound == 1)
             {
-          ////const adjacentKeyPoints =
-          ////posenet.getAdjacentKeyPoints(bodyPose.keypoints, 0.001);
-          // // adjacentKeyPoints.forEach((keypoints) => {
-          // //   skelePoints.push(keypoints[0].position.x);
-          // //   skelePoints.push(keypoints[0].position.y);
-          // //   //skelePoints.push(keypoints[1].position[0]);
-          // //   //skelePoints.push(keypoints[1].position[1]);
-          // // });
-          //console.log(bodyPose);
+              skeleLines = [];
+            const adjacentKeyPoints =
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.001);
+            adjacentKeyPoints.forEach((keypoints) => {
+              skeleLines.push(keypoints[0].position.x);
+              skeleLines.push(keypoints[0].position.y);
+              skeleLines.push(keypoints[1].position.x);
+              skeleLines.push(keypoints[1].position.y);
+            });
 
             skelePoints = [];
-            for (let iter = 0; iter < segmentation.allPoses[person].keypoints.length; iter++)
+
+            for (let iter = 0; iter < segmentation[person].pose.keypoints.length; iter++)
             {
-              if (segmentation.allPoses[person].keypoints[iter].score < 0.1) {
+              if (segmentation[person].pose.keypoints[iter].score < 0.1) {
                 continue;
               }
-              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.x);
-              skelePoints.push(segmentation.allPoses[person].keypoints[iter].position.y);
+              skelePoints.push(segmentation[person].pose.keypoints[iter].position.x);
+              skelePoints.push(segmentation[person].pose.keypoints[iter].position.y);
             }
             bodyPoseFound = 0;
           }
+
+
+          gl.useProgram(renderSkeletonProgram);
+          gl.bindVertexArray(gl.vaoSkeleton);
+          gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
+          gl.viewport(0, 240, c.width / 2.0, c.height - 240);
+          gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
+          let sl = Float32Array.from(skeleLines);
+          gl.bufferSubData(gl.ARRAY_BUFFER, 0, sl, 0, skeleLines.length);
+          gl.lineWidth(5);
+          gl.drawArrays(gl.LINES, 0, skeleLines.length / 2);     
+          gl.bindVertexArray(null);
+
           gl.useProgram(renderSkeletonProgram);
           gl.bindVertexArray(gl.vaoSkeleton);
           gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
@@ -793,7 +832,7 @@
       vaoSkeleton = gl.createVertexArray();
       gl.bindVertexArray(vaoSkeleton);
 
-      let arrSkele = new Float32Array(17 * 2);
+      let arrSkele = new Float32Array(100);
       var skeleton_buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, skeleton_buffer);
       gl.bufferData(gl.ARRAY_BUFFER, arrSkele, gl.DYNAMIC_COPY);
@@ -803,7 +842,7 @@
 
       gl.bindVertexArray(null);
 
-      var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32I, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+      var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
 
       var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
       var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
