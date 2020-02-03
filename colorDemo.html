@@ -485,8 +485,11 @@
     function initCanvas(e) {
       //console.log(this.videoWidth)
       //videoLoaded = 1;
-      videoFF.width = imageSize[0];
-      videoFF.height = imageSize[1];
+      videoFF.width = videoFF.videoWidth;
+      videoFF.height = videoFF.videoHeight;
+      imageSize = [videoFF.width, videoFF.height];
+      setTextures(gl);
+
     }
 
     function drawFrame(e) {
