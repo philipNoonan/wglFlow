@@ -195,7 +195,7 @@ function getFlowFromPart(gl, maskTex) {
 
   // using body-pix supplied list of ID pixels indicating chest area
   gl.bindImageTexture(0, gl.densify_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA32F);
-  gl.bindImageTexture(1, maskTex, 0, false, 0, gl.READ_ONLY, gl.R32I);
+  gl.bindImageTexture(1, maskTex, 0, false, 0, gl.READ_ONLY, gl.R32F);
 
   // loop for each person detected?
 

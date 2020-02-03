@@ -19,7 +19,7 @@
     max-width: 400px;
   }
 
-  select {
+  /* select {
     background-color: transparent;
     width: 100%;
     padding: 4px 0;
@@ -27,7 +27,7 @@
     color: rgba(0,0,0, 0.26);
     border: none;
     border-bottom: 1px solid rgba(0,0,0, 0.12);
-  }
+  } */
 
   select:focus {
     outline: none;
@@ -157,10 +157,7 @@
       display: block;
     }
   </style>
-  <div>
-    <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label>
-    <canvas id="canvasGL" width="1696" height="960"></canvas>
-  </div>
+
 </template>
 
 <body onload="onLoad()">
@@ -172,7 +169,7 @@
     <pre>chrome.exe --use-cmd-decoder=passthrough --use-angle=gl --enable-webgl2-compute-context</pre>
     <p>Linux - USE CHROME DEV: </p>
     <pre>google-chrome-unstable --use-gl=angle --use-angle=gl --use-cmd-decoder=passthrough --enable-webgl2-compute-context</pre>
-</div>
+  </div>
 
   <h2>wglFlow</h2>
   <div id="console">
@@ -189,12 +186,17 @@
   <input id="myInput" type="file" accept="video/*" style="visibility:hidden" />
 
 
-  <div id="tabcontainer">
-    <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/>
-    <div id="tabcontent">
-      <div id = tabcontent1>
+  <!-- <div id="tabcontainer"> -->
+    <!-- <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/> -->
+    <!-- <div id="tabcontent"> -->
+      <!-- <div id = tabcontent1>
         <video-stream></video-stream>
-      </div>
+      </div> -->
+    <!-- </div> -->
+
+  <div>
+    <!-- <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label> -->
+    <canvas id="canvasGL" width="1696" height="960"></canvas>
   </div>
 
   <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> -->
@@ -381,10 +383,16 @@
   var paramGUI = function() {
     this.speed = 10;
     this.checkForNewFrames = true;
+    this.useWebcam = function() {
+      connectedCallback();
+      loadWebcam()
+    };
     this.loadBP = function() {loadBodyPix()};
     this.loadFile = function() { 
-            document.getElementById('myInput').click();
+      document.querySelector('input').addEventListener('change', extractFrames, false);
+      document.getElementById('myInput').click();
     }
+    this.resolution = '640x480';
   };
 
   var spd = 10;
@@ -396,8 +404,10 @@
 
   var spdcont = gui.add(param, 'speed', 1, 20);
   var checkFrames = gui.add(param, 'checkForNewFrames');
+  gui.add(param, 'useWebcam').name('Use Webcam');
   gui.add(param, 'loadBP').name('Load BodyPix');
   gui.add(param, 'loadFile').name('Load video file');
+  var checkReso = gui.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
 
   spdcont.onChange(function(value) {
     spd = value;
@@ -408,6 +418,28 @@
     checkFramesFlag = value;
   });
 
+  checkReso.onChange(function(value) {
+    frameAvailableColor = false;
+    switch(value) {
+      case '1920x1080':
+        imageSize = [1920, 1080];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      case '1280x720':
+        imageSize = [1280, 720];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      case '640x480':
+        imageSize = [640, 480];
+        setTextures(gl);
+        loadWebcam();
+        break;
+      default:
+        break;
+      };
+  });
 
   // vao
   var vaoRender;
@@ -421,6 +453,7 @@
   var skeleLines = [];
 
   var newImage = 1;
+  var frameAvailableColor = false;
 
   var plottingBufferProgram;
 
@@ -435,6 +468,10 @@
 
   var imageSize = [640, 480];
   var numberOflevels = 6;
+
+  var gl;
+
+
 
 
 
@@ -468,6 +505,8 @@
     videoFF.addEventListener('loadedmetadata', initCanvas, false);
     videoFF.addEventListener('loadeddata', loadedData, false);
     videoFF.addEventListener('timeupdate', drawFrame, false);
+    videoFF.addEventListener("play", _frameLoop);
+
 
     videoFF.src = URL.createObjectURL(this.files[0]);
     videoFF.muted = true;
@@ -477,31 +516,30 @@
     videoFF.play();
   }
 
-  customElements.define('video-stream', class extends HTMLElement {
-    constructor() {
-      super();
-      const template = document.querySelector('#video-stream');
-      const clone = document.importNode(template.content, true);
-      const shadowRoot = this.attachShadow({ mode: 'open' });
-      this.shadowRoot.appendChild(clone);
+  // customElements.define('video-stream', class extends HTMLElement {
+  //   constructor() {
+  //     super();
+  //     const template = document.querySelector('#video-stream');
+  //     const clone = document.importNode(template.content, true);
+  //     const shadowRoot = this.attachShadow({ mode: 'open' });
+  //     this.shadowRoot.appendChild(clone);
 
-      this._frameLoop = this._frameLoop.bind(this);
+  //     this._frameLoop = this._frameLoop.bind(this);
 
-      this.readBuffer = null;
-      this.readFormat = null;
-    }
-
-
+  //     this.readBuffer = null;
+  //     this.readFormat = null;
+  //   }
 
 
 
-    connectedCallback() {
-      this.gl = this._configureGLContext();
 
-      this.frameAvailableColor = false;
+
+    function connectedCallback() {
+
+      frameAvailableColor = false;
 
       this.videoColor = this._createOffscreenVideo();
-      this.videoColor.oncanplay = _ => { this.frameAvailableColor = true; }
+      this.videoColor.oncanplay = _ => { frameAvailableColor = true; }
       this.videoColor.addEventListener("play", this._frameLoop);
 
       let hasTouchListeners = false;
@@ -517,7 +555,7 @@
       }
     }
 
-    _createOffscreenVideo() {
+    function _createOffscreenVideo() {
       return Object.assign(document.createElement("video"), {
         autoplay: true,
         loop: true,
@@ -527,12 +565,11 @@
       });
     }
     
-    _frameLoopColor() {
+    // _frameLoopColor() {
 
-    }
+    // }
 
-    async _frameLoop() {
-      const gl = this.gl;
+    async function _frameLoop() {
       stats.begin();
 
       gl.clearColor(0, 0, 0, 0);
@@ -555,14 +592,14 @@
       }
 
 
-      let c = this.shadowRoot.getElementById("canvasGL");
+      let c = document.getElementById("canvasGL");
 
 
 
 
     
 
-      if (this.frameAvailableColor) {
+      if (frameAvailableColor) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
@@ -583,7 +620,7 @@
         checkIfNewImage(gl, gl.lastColor_texture, gl.color_texture);
       }
       
-      if (frameCounter > 0 && this.frameAvailableColor && (gl.newImage == 1 || checkFramesFlag == false)) {
+      if (frameCounter > 0 && (frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
  
         for (let lvl = 0; lvl < numberOflevels; lvl++) {
         calcGradient(gl, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl);
@@ -646,7 +683,7 @@
             {
               skeleLines = [];
             const adjacentKeyPoints =
-            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.001);
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.8);
             adjacentKeyPoints.forEach((keypoints) => {
               skeleLines.push(keypoints[0].position.x);
               skeleLines.push(keypoints[0].position.y);
@@ -682,7 +719,7 @@
           gl.useProgram(renderSkeletonProgram);
           gl.bindVertexArray(gl.vaoSkeleton);
           gl.uniform2fv(gl.getUniformLocation(renderSkeletonProgram, "imageSize"), imageSize);
-          gl.viewport(c.width / 2.0, 240, c.width / 2.0, c.height - 240);
+          gl.viewport(0, 240, c.width / 2.0, c.height - 240);
           gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
           let sp = Float32Array.from(skelePoints);
           gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
@@ -727,7 +764,7 @@
 
 
 
-      if (this.frameAvailableColor && (gl.newImage == 1 || checkFramesFlag == false)) {
+      if ((frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
         //for (let lvl = 0; lvl < numberOflevels; lvl++) {
        // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
       //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
@@ -754,7 +791,7 @@
 
 
       if (!this.paused)
-        window.requestAnimationFrame(this._frameLoop);
+        window.requestAnimationFrame(_frameLoop);
 
     }
 
@@ -765,23 +802,26 @@
 
     // Creates WebGL/WebGL2 context used to upload depth video to texture,
     // read the pixels to Float buffer and optionElally render the texture.
-    _configureGLContext() {
-      const canvas = this.shadowRoot.getElementById("canvasGL");
-      const gl = canvas.getContext('webgl2-compute', {antialias: false});
+    function _configureGLContext() {
+      const canvas = document.getElementById("canvasGL");
+      const ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
-      if (!gl) {
+      if (!ctx) {
         document.getElementById("no-support").style.display = 'block';
         return;
       }
-      if (gl) {
+      if (ctx) {
         // The extension tells us if we can use single component R32F texture format.
-        gl.color_buffer_float_ext = gl.getExtension('EXT_color_buffer_float');
+        ctx.color_buffer_float_ext = ctx.getExtension('EXT_color_buffer_float');
       } else {
-        gl = canvas.getContext("webgl");
-        gl.getExtension("OES_texture_float");
+        ctx = canvas.getContext("webgl");
+        ctx.getExtension("OES_texture_float");
       }
 
+      return ctx;
+    }
 
+    function initGL(gl) {
 
       // VERTEX FRAGMENT SHADERS
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
@@ -799,7 +839,12 @@
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
       getFlowFromPartProgram = createComputeProgram(gl, getFlowFromPartSource);
-      
+
+    }
+
+    function setBuffers(gl) {
+
+         
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
@@ -841,6 +886,56 @@
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
       gl.bindVertexArray(null);
+
+      let checkData = new Uint32Array(1);
+      var ssboCheckData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
+
+      let chestFlowData = new Float32Array(16 * 2);
+      var ssboChestFlowData = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
+
+
+      gl.useProgram(renderPlottingProgram);
+      vaoPlotting = gl.createVertexArray();
+      gl.bindVertexArray(vaoPlotting);
+
+      let emptyGraphPoints = new Float32Array(2*1024);
+      var ssboGraphX = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindVertexArray(null);
+
+
+
+      gl.vertex_buffer = vertex_buffer;
+      gl.vertex_location = vertex_location;
+      gl.index_buffer = index_buffer;
+
+
+
+      gl.vaoRender = vaoRender;
+      gl.vaoSkeleton = vaoSkeleton;
+      gl.vaoPlotting = vaoPlotting;
+
+      gl.skeleton_buffer = skeleton_buffer;
+
+gl.ssboCheckData = ssboCheckData;
+gl.ssboChestFlowData = ssboChestFlowData;
+gl.ssboGraphX = ssboGraphX;
+
+    } 
+    
+    function setTextures(gl) {
+
 
       var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
 
@@ -894,85 +989,64 @@
 
       }
 
-      let checkData = new Uint32Array(1);
-      var ssboCheckData = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboCheckData);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, checkData, gl.DYNAMIC_COPY);
+      gl.frameBuffers = frameBuffers;
 
-      let chestFlowData = new Float32Array(16 * 2);
-      var ssboChestFlowData = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
-
-
-      gl.useProgram(renderPlottingProgram);
-      vaoPlotting = gl.createVertexArray();
-      gl.bindVertexArray(vaoPlotting);
-
-      let emptyGraphPoints = new Float32Array(2*1024);
-      var ssboGraphX = gl.createBuffer();
-      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
-      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
-
-
-      gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-      gl.bindVertexArray(null);
 
 
       gl.newImage = newImage;
 
-
-      gl.vertex_buffer = vertex_buffer;
-      gl.vertex_location = vertex_location;
-      gl.index_buffer = index_buffer;
-
-
-
-      gl.vaoRender = vaoRender;
-      gl.vaoSkeleton = vaoSkeleton;
-      gl.vaoPlotting = vaoPlotting;
-
+      if (gl.color_texture != null) {
+        delTexture(gl, gl.color_texture);
+      }
       gl.color_texture = color_texture;
+      if (gl.lastColor_texture != null) {
+        delTexture(gl, gl.lastColor_texture);
+      }
       gl.lastColor_texture = lastColor_texture;
-
+      if (gl.gradient_texture != null) {
+        delTexture(gl, gl.gradient_texture);
+      }
       gl.gradient_texture = gradient_texture;
+      if (gl.lastGradient_texture != null) {
+        delTexture(gl, gl.lastGradient_texture);
+      }
       gl.lastGradient_texture = lastGradient_texture;
-
+      if (gl.densify_texture != null) {
+        delTexture(gl, gl.densify_texture);
+      }
       gl.densify_texture = densify_texture;
+      if (gl.flow_texture != null) {
+        delTexture(gl, gl.flow_texture);
+      }
       gl.flow_texture = flow_texture;
-
+      if (gl.sparseFlow_texture != null) {
+        delTexture(gl, gl.sparseFlow_texture);
+      }
       gl.sparseFlow_texture = sparseFlow_texture;
-
+      if (gl.render_texture != null) {
+        delTexture(gl, gl.render_texture);
+      }
       gl.render_texture = render_texture;
-
+      if (gl.test_texture != null) {
+        delTexture(gl, gl.test_texture);
+      }
       gl.test_texture = test_texture;
-
-      gl.frameBuffers = frameBuffers;
-
-      gl.skeleton_buffer = skeleton_buffer;
-
-      gl.ssboCheckData = ssboCheckData;
-      gl.ssboChestFlowData = ssboChestFlowData;
-      gl.ssboGraphX = ssboGraphX;
-
+      if (gl.mask_texture != null) {
+        delTexture(gl, gl.mask_texture);
+      }
       gl.mask_texture = mask_texture;
 
-
-      return gl;
     }
 
-    async loadStream(deviceId) {
+    async function loadStream(deviceId) {
       stopVideo(videos.color);
     
 
       const getUserMediaColor = () => {
         // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
-        if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return webCamera.getColorStream(imageSize[0], imageSize[1]);
-        }
+        //if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
+          return getColorStream(imageSize[0], imageSize[1]);
+        //}
 
         const constraints = {
           video: {
@@ -986,7 +1060,10 @@
       try {
         const streamColor = await getUserMediaColor();
         this.videoColor.srcObject = streamColor;
+        this.videoColor.width = imageSize[0];
+        this.videoColor.height = imageSize[1];
         videos.color = this.videoColor;
+        
 
         //videos.color = this.videoDepth;
 
@@ -999,7 +1076,7 @@
         console.error(err);
       }
     }
-  });
+  //});
 
 
 
@@ -1007,7 +1084,7 @@
 
   function populateSelectElement(devices) {
     const selectEl = document.querySelector('#selectVideoDevice');
-    const videoStreamEl = document.querySelector('video-stream');
+    //const videoStreamEl = document.querySelector('video-stream');
 
     let selected = selectEl.value;
 
@@ -1036,9 +1113,9 @@
       selectEl.value = selected;
     } else if (!selected) {
       // If no other device is selected, set the initial selection to depth device.
-      if (videoStreamEl.colorDeviceId) {
-        selectEl.value = videoStreamEl.colorDeviceId;
-      }
+      //if (videoStreamEl.colorDeviceId) {
+      //  selectEl.value = videoStreamEl.colorDeviceId;
+      //}
     }
 
 
@@ -1046,30 +1123,36 @@
 
 
 
-
-
-
   function onLoad() {
+    gl = this._configureGLContext();
+    initGL(gl);
+    setTextures(gl);
+    setBuffers(gl);
+  }
 
 
-    document.querySelector('input').addEventListener('change', extractFrames, false);
+
+  function loadWebcam() {
 
 
-    const videoStreamEl = document.querySelector('video-stream');
+
+
+
+    //const videoStreamEl = document.querySelector('video-stream');
     const selectEl = document.querySelector('#selectVideoDevice');
 
     selectEl.onchange = async event => {
       selectEl.disabled = true;
       const deviceId = event.target.value;
 
-      await videoStreamEl.loadStream(deviceId);
+      await loadStream(deviceId);
 
       const devices = await navigator.mediaDevices.enumerateDevices();
       populateSelectElement(devices);
-      if (selectedtab.value != "basic") {
-        // It is on by default; stop rendering it if not visible.
-        stopBasicTab();
-      }
+      // if (selectedtab.value != "basic") {
+      //   // It is on by default; stop rendering it if not visible.
+      //   stopBasicTab();
+      // }
 
       selectEl.disabled = false;
     };

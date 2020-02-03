@@ -1,25 +1,7 @@
-class webCamera {
+  let stream;
 
-  constructor() {
-  }
+  async function getColorStream(w, h) {
 
-  static async getColorStream(w, h) {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices ||
-      !navigator.mediaDevices.getUserMedia) {
-      throw new Error("Your browser doesn't support the required mediaDevices APIs.");
-    }
-    const supported_constraints = navigator.mediaDevices.getSupportedConstraints();
-    if (supported_constraints.videoKind) {
-      let stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          videoKind: {exact: "video"},
-          frameRate: {exact: 30}
-        }
-      });
-      const track = stream.getVideoTracks()[0];
-      let settings = track.getSettings ? track.getSettings() : null;
-      return stream;
-    }
 
     const constraints = {
       audio: false,
@@ -30,7 +12,13 @@ class webCamera {
       }
     }
 
-    let stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (stream) {
+      stream.getTracks().forEach(track => {
+        track.stop();
+      });
+    }
+
+    stream = await navigator.mediaDevices.getUserMedia(constraints);
     // let track = stream.getVideoTracks()[0];
     // if (track.label.indexOf("RealSense") == -1) {
     //   throw new Error(chromeVersion() < 58 ?
@@ -40,7 +28,6 @@ class webCamera {
     return stream;
   }
 
-}
 
 function chromeVersion() {
 const raw = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);

@@ -2,7 +2,7 @@ const getFlowFromPartSource = `#version 310 es
 layout(local_size_x = 112, local_size_y = 1) in;
 
 layout(binding = 0, rgba32f) readonly uniform highp image2D flowMap;
-layout(binding = 1, r32i) readonly uniform highp iimage2D maskMap;
+layout(binding = 1, r32f) readonly uniform highp image2D maskMap;
 
 layout(std430, binding = 0) buffer OutputData
 {
@@ -28,7 +28,7 @@ void main()
     {
       for (uint x = sline; x < imSize.x; x += gl_WorkGroupSize.x)
       {
-		int partID = imageLoad(maskMap, ivec2(x, y)).x;
+		int partID = int(imageLoad(maskMap, ivec2(x, y)).x);
 		if (partID == 12)
 		{
 			vec2 flow = imageLoad(flowMap, ivec2(x, y)).xy;

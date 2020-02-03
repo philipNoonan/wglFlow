@@ -43,3 +43,7 @@ self.generateTexture = function (gl, type, format, levels, width, height, depth,
   
     return texture;
   };
+
+  self.delTexture = function (gl, target) {
+    gl.deleteTexture(target);
+  }
