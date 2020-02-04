@@ -85,7 +85,7 @@ function calcGradient(gl, level, width, height) {
 
     gl.useProgram(edgeDetectProgram);
 
-    gl.uniform1i(gl.getUniformLocation(disSearchProgram, "colorMap"), 0);
+    gl.uniform1i(gl.getUniformLocation(edgeDetectProgram, "colorMap"), 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
 

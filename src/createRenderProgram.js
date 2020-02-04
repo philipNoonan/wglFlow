@@ -33,7 +33,7 @@ self.createRenderProgram = function (gl, vertexShaderCode, fragmentShaderCode) {
     if (!linked) {
       // There were errors, so get the errors and display them.
       var error = gl.getProgramInfoLog(program);
-      out.displayError('Fatal error: Failed to link program: ' + error);
+      console.log('Fatal error: Failed to link program: ' + error);
       gl.deleteProgram(program);
       gl.deleteShader(fragmentShader);
       gl.deleteShader(vertexShader);

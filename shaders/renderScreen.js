@@ -15,10 +15,10 @@ const fragmentShaderSource = `#version 310 es
     precision highp float;
 
     layout(binding = 0) uniform highp sampler2D maskMap;
-    //layout(binding = 1) uniform highp sampler2D lastColorTex;
+    layout(binding = 1) uniform highp sampler2D lastColorTex;
 
     //layout(binding = 0, r32f) readonly uniform highp image2D colorMap;
-    layout(binding = 1, rgba8ui) readonly uniform highp uimage2D lastColorMap;
+    //layout(binding = 1, rgba8ui) readonly uniform highp uimage2D lastColorMap;
     layout(binding = 4, rgba8ui) readonly uniform highp uimage2D blurredColorMap;
 
     layout(binding = 2, rgba32f) readonly uniform highp image2D gradMap;
@@ -62,10 +62,12 @@ const fragmentShaderSource = `#version 310 es
     {
         vec4 mask = vec4(texelFetch(maskMap, ivec2(t_image + 0.5f), 0));
         
-        vec4 col = vec4(imageLoad(lastColorMap, ivec2(t_image + 0.5f)));
+        vec4 col = vec4(texelFetch(lastColorTex, ivec2(t_image + 0.5f), 0));
+
+        //vec4 col = vec4(imageLoad(lastColorMap, ivec2(t_image + 0.5f)));
         vec4 lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
 
-        outColor = vec4(col.xyz / 256.0f, 1.0f);
+        outColor = vec4(col.xyz, 1.0f);
         if (mask.x == 12.0f)
         {
             vec4 tFlow = imageLoad(flowMap, ivec2(t_image + 0.5f));

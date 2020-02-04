@@ -41,10 +41,14 @@ function render(gl, width, height, rmax, rmin) {
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), [imageSize[0] / 1, imageSize[1] / 1]);
 
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "maskMap"), 0);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "lastColorTex"), 1);
+
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
-    // gl.activeTexture(gl.TEXTURE1);
-    // gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+
     //gl.bindImageTexture(0, gl.mask_texture, 0, false, 0, gl.READ_ONLY, gl.R32F);
     gl.bindImageTexture(1, gl.color_texture, 0, false, 0, gl.READ_ONLY, gl.RGBA8UI);
     gl.bindImageTexture(4, gl.color_texture, 4, false, 0, gl.READ_ONLY, gl.RGBA8UI); // for blurred image

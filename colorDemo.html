@@ -314,18 +314,31 @@
 
   }
 
-  async function getBodyMap(image, net) {
-    const seggy = await net.segmentMultiPersonParts(image, {
+  async function getBodyMap(image, net, mppmFlag) {
+    if (mppmFlag == true) {
+      const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.7,
+      segmentationThreshold: 0.5,
       maxDetections: 10,
       scoreThreshold: 0.2,
       nmsRadius: 20,
       minKeypointScore: 0.3,
-      refineSteps: 10
+      refineSteps: 20
     });
     segmentation = seggy;
+
+    }
+    else {
+      const seggy = await net.segmentPersonParts(image, {
+        flipHorizontal: false,
+        internalResolution: 'medium',
+        segmentationThreshold: 0.7
+      });
+      segmentation = seggy;
+
+    }
+
     bodyMapFound = 1;
     if (firstbodyMapFound == 0)
     {
@@ -383,6 +396,7 @@
   var paramGUI = function() {
     this.speed = 10;
     this.checkForNewFrames = true;
+    this.checkMPPM = true;
     this.useWebcam = function() {
       connectedCallback();
       loadWebcam()
@@ -397,17 +411,25 @@
 
   var spd = 10;
   var checkFramesFlag = true;
+  var checkMPPMFlag = true;
 
   var gui = new dat.GUI();
   var param = new paramGUI();
-  gui.open();
+
+  var folderWebcam = gui.addFolder('Webcam');
+  folderWebcam.add(param, 'useWebcam').name('Use Webcam');
+  var checkReso = folderWebcam.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
+  folderWebcam.open();
+  
+  var folderVideoFile = gui.addFolder('Video');
+  folderVideoFile.add(param, 'loadFile').name('Load video file');
+  folderVideoFile.open();
+
+  var checkFrames = gui.add(param, 'checkForNewFrames');
+  var checkMutliPersonPartMap = gui.add(param, 'checkMPPM');
 
   var spdcont = gui.add(param, 'speed', 1, 20);
-  var checkFrames = gui.add(param, 'checkForNewFrames');
-  gui.add(param, 'useWebcam').name('Use Webcam');
   gui.add(param, 'loadBP').name('Load BodyPix');
-  gui.add(param, 'loadFile').name('Load video file');
-  var checkReso = gui.add(param, 'resolution', ['1920x1080', '1280x720', '640x480']);
 
   spdcont.onChange(function(value) {
     spd = value;
@@ -416,6 +438,10 @@
 
   checkFrames.onChange(function(value) {
     checkFramesFlag = value;
+  });
+
+  checkMutliPersonPartMap.onChange(function(value) {
+    checkMPPMFlag = value;
   });
 
   checkReso.onChange(function(value) {
@@ -584,13 +610,13 @@
 
       if (videoLoaded == 0)
       {
-        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
-          getBodyMap(this.videoColor, net)
+        if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0 || Math.round(spd) <= 1) {
+          getBodyMap(this.videoColor, net, checkMPPMFlag)
         }
       }
       else {
         if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0) {
-          getBodyMap(videoFF, net)
+          getBodyMap(videoFF, net, checkMPPMFlag)
         }
       }
 
@@ -647,11 +673,31 @@
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
         //var seg = Float32Array.from(segmentation.data);
-        for (let person = 0; person < segmentation.length; person++) {
-          if (segmentation[person].pose.score > 0.3) {
-            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
+        if (checkMPPMFlag == true) {
+          try {
+            for (let person = 0; person < segmentation.length; person++) {
+              if (segmentation[person].pose.score > 0.3) {
+                gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, segmentation[person].data);
+              }
+            }
           }
+          catch(error) {
+            console.log(error);
+          }
+
         }
+        else {
+          try {
+            let seg = Float32Array.from(segmentation.data);
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, seg); 
+          }
+          catch(error) {
+            console.log(error);
+          }
+
+        }
+
+        
         var sumFlow = getFlowFromPart(gl, gl.mask_texture);
 
         runningSum += sumFlow[1];
@@ -686,7 +732,7 @@
             {
               skeleLines = [];
             const adjacentKeyPoints =
-            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.8);
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.1);
             adjacentKeyPoints.forEach((keypoints) => {
               skeleLines.push(keypoints[0].position.x);
               skeleLines.push(keypoints[0].position.y);
@@ -726,7 +772,7 @@
           gl.bindBuffer(gl.ARRAY_BUFFER, gl.skeleton_buffer);
           let sp = Float32Array.from(skelePoints);
           gl.bufferSubData(gl.ARRAY_BUFFER, 0, sp, 0, skelePoints.length);
-          gl.drawArrays(gl.POINTS, 0, skelePoints.length);     
+          gl.drawArrays(gl.POINTS, 0, skelePoints.length / 2);     
           gl.bindVertexArray(null);
 
           }
@@ -807,7 +853,7 @@
     // read the pixels to Float buffer and optionElally render the texture.
     function _configureGLContext() {
       const canvas = document.getElementById("canvasGL");
-      const ctx = canvas.getContext('webgl2-compute', {antialias: false});
+      var ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
       if (!ctx) {
         document.getElementById("no-support").style.display = 'block';
@@ -827,6 +873,16 @@
     function initGL(gl) {
 
       // VERTEX FRAGMENT SHADERS
+
+      var numTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+      for (var unit = 0; unit < numTextureUnits; ++unit) {
+        gl.activeTexture(gl.TEXTURE0 + unit);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+
+      copyImageProgram = createComputeProgram(gl, copyImageSource);
+
+
       renderProgram = createRenderProgram(gl, vertexShaderSource, fragmentShaderSource);
       renderPlottingProgram = createRenderProgram(gl, plottingVertexShaderSource, plottingFragmentShaderSource);
       renderSkeletonProgram = createRenderProgram(gl, skeletonVertexShaderSource, skeletonFragmentShaderSource);
