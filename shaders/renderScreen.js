@@ -16,13 +16,25 @@ const fragmentShaderSource = `#version 310 es
 
     layout(binding = 0) uniform highp sampler2D maskMap;
     layout(binding = 1) uniform highp sampler2D lastColorTex;
+    layout(binding = 2) uniform highp sampler2D gradTex;
+    layout(binding = 3) uniform highp sampler2D flowTex;
+    layout(binding = 4) uniform highp sampler2D dstTex;
 
-    //layout(binding = 0, r32f) readonly uniform highp image2D colorMap;
-    //layout(binding = 1, rgba8ui) readonly uniform highp uimage2D lastColorMap;
-    layout(binding = 4, rgba8ui) readonly uniform highp uimage2D blurredColorMap;
+    uniform int renderLevel;
 
-    layout(binding = 2, rgba32f) readonly uniform highp image2D gradMap;
-    layout(binding = 3, rgba32f) readonly uniform highp image2D flowMap;
+    float pi = atan(1.0f)*4.0f;
+    float tau = atan(1.0f)*8.0f;
+
+    vec3 rainbow(float x)
+    {
+        vec3 col = vec3(0);
+        col.r = cos(x * tau - (0.0f/3.0f)*tau);
+        col.g = cos(x * tau - (1.0f/3.0f)*tau);
+        col.b = cos(x * tau - (2.0f/3.0f)*tau);
+        
+        return col * 0.5f + 0.5f;
+    }
+
 
     uniform int renderOptions;
     in vec2 t;
@@ -60,17 +72,16 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderColor == 1)
     {
-        vec4 mask = vec4(texelFetch(maskMap, ivec2(t_image + 0.5f), 0));
+        vec4 mask = vec4(texture(maskMap, t));
         
-        vec4 col = vec4(texelFetch(lastColorTex, ivec2(t_image + 0.5f), 0));
+        vec4 col = vec4(texelFetch(lastColorTex, ivec2(t_image), renderLevel));
 
-        //vec4 col = vec4(imageLoad(lastColorMap, ivec2(t_image + 0.5f)));
-        vec4 lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
+        vec4 lastcol = vec4(texelFetch(lastColorTex, ivec2(t * vec2(textureSize(lastColorTex, 4).xy)), 4));
 
         outColor = vec4(col.xyz, 1.0f);
         if (mask.x == 12.0f)
         {
-            vec4 tFlow = imageLoad(flowMap, ivec2(t_image + 0.5f));
+            vec4 tFlow = vec4(texture(flowTex, t, float(renderLevel)));
         
             float scale = 50.0f;
             vec3 rgb = flowToRGB(tFlow.xy, scale);
@@ -79,8 +90,8 @@ const fragmentShaderSource = `#version 310 es
         }
         else if (mask.x == 0.0f || mask.x == 1.0f)
         {
-            lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
-            outColor = vec4(lastcol.xyz / 255.0f, 1.0f);
+            //lastcol = vec4(imageLoad(blurredColorMap, ivec2(t * vec2(imageSize(blurredColorMap).xy) + 0.5f)));
+            outColor = vec4(lastcol.xyz, 1.0f);
         }
 
 
@@ -88,17 +99,32 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderGrad == 1)
     {
-        vec4 col = imageLoad(gradMap, ivec2(t_image + 0.5f));
+        vec4 col = vec4(texture(gradTex, t, float(renderLevel)));
+
         outColor = vec4(abs(col.xy) * 10.0f, 0.0f, 1.0f);
     }
 
     if (renderFlow == 1)
     {
-        vec4 tFlow = imageLoad(flowMap, ivec2(t_image + 0.5f));
+        vec4 tFlow = vec4(texture(flowTex, t, float(renderLevel)));
         float scale = 10.0f;
         vec3 rgb = flowToRGB(tFlow.xy, scale);
 
-        outColor = vec4((1.0 - rgb), 1.0f);
+        outColor = vec4(1.0f - rgb, 1.0f);
+        
+
+    }
+
+    if (renderVert == 1)
+    {
+        vec4 tempFFT = vec4(texture(dstTex, t));
+        //outColor = vec4(log(length(tempFFT.xy)) / log(480.0f*480.0f), 0, 0, 1);
+        //outColor = vec4(log((tempFFT.xy)), 0, 1);
+        //outColor = vec4(log(length(tempFFT.xy)) / log(480.0f*480.0f), 0, 0, 1);
+        outColor = vec4(length(tempFFT.xy) / 480.0f, 0, 0, 1);
+
+        //outColor = vec4(rainbow(atan(tempFFT.y,tempFFT.x) / pi + 0.5f), 1);        
+        //outColor = vec4((tempFFT.xy / 480.0f) * 0.5f + 0.5f, 0.0, 1);        
 
     }
 }

@@ -196,7 +196,7 @@
 
   <div>
     <!-- <label>WebGL2.0-Compute Powered Optical Flow: wglFlow:</label> -->
-    <canvas id="canvasGL" width="1696" height="960"></canvas>
+    <canvas id="canvasGL" width="1600" height="900"></canvas>
   </div>
 
   <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script> -->
@@ -235,6 +235,7 @@
   <script src="shaders/ploting.js"></script>
   <script src="shaders/skeleton.js"></script>
   <script src="shaders/checkIfNewImage.js"></script>
+  <script src="shaders/fft.js"></script>
 
 </body>
 
@@ -269,6 +270,17 @@
   var bodyPixLoaded = 0;
   var bodyMapFound = 0;
   var firstbodyMapFound = 0;
+
+  function getCursorPosition(canvas, event) {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    mouseClickPos[0] = (x / (canvas.width / 2));
+    mouseClickPos[1] = y / (canvas.height - 240.0);
+    console.log("x: " + mouseClickPos[0] + " y: " + mouseClickPos[1]);
+
+
+  }
 
   function clickPoseNet() {
     loadPoseNet();
@@ -387,6 +399,8 @@
   var runningMax = 5000;
   var plottingPoints = [];
 
+  var savingRespirationData = false;
+
   var stats = new Stats();
   stats.showPanel(0);
   stats.domElement.style.cssText = 'position:absolute;top:0px;left:0px;';
@@ -395,6 +409,7 @@
 
   var paramGUI = function() {
     this.speed = 10;
+    this.renderLevel = 0;
     this.checkForNewFrames = true;
     this.checkMPPM = true;
     this.useWebcam = function() {
@@ -405,13 +420,27 @@
     this.loadFile = function() { 
       document.querySelector('input').addEventListener('change', extractFrames, false);
       document.getElementById('myInput').click();
-    }
+    };
+    this.saveToDisk = function() {
+      savingRespirationData = true;
+    };
     this.resolution = '640x480';
+    this.manVai = 'manual';
+    this.radius = 50;
   };
 
   var spd = 10;
+  var rndrLevel = 0;
+  var radius = 50;
   var checkFramesFlag = true;
   var checkMPPMFlag = true;
+
+  var renderColor = true;
+  var renderGrad = false;
+  var renderFlow = true;
+
+  var usingManual = true;
+  var usingBodyPose = false;
 
   var gui = new dat.GUI();
   var param = new paramGUI();
@@ -429,11 +458,22 @@
   var checkMutliPersonPartMap = gui.add(param, 'checkMPPM');
 
   var spdcont = gui.add(param, 'speed', 1, 20);
+  var rndrcont = gui.add(param, 'renderLevel', 0, 6);
   gui.add(param, 'loadBP').name('Load BodyPix');
+  gui.add(param, 'saveToDisk').name('Save Respiration Data');
+  var checkDetectMethod = gui.add(param, 'manVai', ['manual', 'bodyPose']);
+  var radcont = gui.add(param, 'radius', 10, 255);
 
   spdcont.onChange(function(value) {
     spd = value;
-    //console.log(spd);
+  });
+
+  rndrcont.onChange(function(value) {
+    gl.rndrLevel = Math.ceil(value);
+  });
+
+  radcont.onChange(function(value) {
+    radius = value;
   });
 
   checkFrames.onChange(function(value) {
@@ -442,6 +482,12 @@
 
   checkMutliPersonPartMap.onChange(function(value) {
     checkMPPMFlag = value;
+
+
+
+
+
+
   });
 
   checkReso.onChange(function(value) {
@@ -467,10 +513,22 @@
       };
   });
 
+  checkDetectMethod.onChange(function(value) {
+    if (value == 'manual') {
+      usingManual = true;
+    }
+    else if (value == 'bodyPose') {
+      usingBodyPose = true;
+    }
+  });
+
   // vao
   var vaoRender;
   var vaoSkeleton;
   var vaoPlotting;
+  var vaoDensify;
+
+  //var xhr = new XMLHttpRequest;
 
   var renderProgram;
   var renderPlottingProgram;
@@ -483,12 +541,16 @@
 
   var plottingBufferProgram;
 
+  var fftProgram;
+
   var copyImageProgram;
   var genMipMapProgram;
   var checkIfNewImageProgram;
   var edgeDetectProgram;
   var disSearchProgram;
   var getFlowFromPartProgram;
+  var getFlowFromPointProgram;
+  var makeMaskFromPointsProgram;
 
   var disDensificationProgram;
 
@@ -496,6 +558,9 @@
   var numberOflevels = 6;
 
   var gl;
+
+  var mouseClickPos = [0.5, 0.5];
+
 
 
 
@@ -661,12 +726,32 @@
         }
 
         copyImage(gl, gl.flow_texture, gl.densify_texture, 0, imageSize[0], imageSize[1], gl.RGBA32F);
-        genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA32F);
+        //genMipMap(gl, gl.flow_texture, numberOflevels, imageSize[0], imageSize[1], gl.RGBA16F);
 
         //gl.newImage = 0;
 
+        doFFT(gl, -1);
+
+        //doFFT(gl, 1);
+
       }
 
+      if (usingManual == true) {
+
+        makeMaskFromPoints(gl, imageSize[0], imageSize[1], gl.mask_texture, mouseClickPos, radius);
+
+        var sumFlow = getFlowFromPart(gl, gl.mask_texture);
+
+        runningSum += sumFlow[1];
+
+        plottingPoints[frameCounter % 1024] = runningSum;
+        runningMax = Math.max(...plottingPoints);
+        runningMin = Math.min(...plottingPoints);
+
+        let scaledX = normalize(runningSum, runningMax, runningMin);
+
+        uploadGraphPoints(gl, runningSum);
+      }
 
 
       if (bodyMapFound == 1) {
@@ -718,7 +803,26 @@
 
       }
 
-      render(gl, c.width, c.height, runningMax, runningMin);
+     render(gl, c.width, c.height, runningMax, runningMin);
+
+     if (savingRespirationData == true) {
+      //xhr.open("POST", "http://127.0.0.1:3000/test", true);
+      //xhr.send([frameCounter,'flow', runningSum, '\r\n']);
+
+      let response = await fetch('http://127.0.0.1:3000/test', {
+        mode: 'no-cors',
+        method: 'POST',
+        body: ([frameCounter,'flow', runningSum, '\r\n'])
+      });
+
+
+
+     }
+
+
+
+
+
 
 
       if (firstbodyMapFound == 1)
@@ -814,11 +918,11 @@
 
 
       if ((frameAvailableColor || videoLoaded) && (gl.newImage == 1 || checkFramesFlag == false)) {
-        //for (let lvl = 0; lvl < numberOflevels; lvl++) {
-       // copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
-      //  copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA32F);
-      //  copyImage(gl, gl.lastGrey_texture, gl.grey_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.R32F);
-        //}
+        // for (let lvl = 0; lvl < numberOflevels; lvl++) {
+        //   //copyImage(gl, gl.lastColor_texture, gl.color_texture, lvl, imageSize[0], imageSize[1], gl.RGBA8UI);
+        //  // copyImage(gl, gl.lastGradient_texture, gl.gradient_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.RGBA16F);
+        //   //copyImage(gl, gl.lastGrey_texture, gl.grey_texture, lvl, imageSize[0] >> lvl, imageSize[1] >> lvl, gl.R32F);
+        // }
           let tempVal = gl.lastColor_texture;
           gl.lastColor_texture = gl.color_texture;
           gl.color_texture = tempVal;
@@ -855,14 +959,25 @@
       const canvas = document.getElementById("canvasGL");
       var ctx = canvas.getContext('webgl2-compute', {antialias: false});
 
-      if (!ctx) {
-        document.getElementById("no-support").style.display = 'block';
-        return;
-      }
+      canvas.addEventListener('mousedown', function(e) {
+        getCursorPosition(canvas, e)
+      });
+
       if (ctx) {
         // The extension tells us if we can use single component R32F texture format.
         ctx.color_buffer_float_ext = ctx.getExtension('EXT_color_buffer_float');
-      } else {
+        ctx.oes_texture_float_linear = ctx.getExtension('OES_texture_float_linear');
+
+        if (!ctx.color_buffer_float_ext) {
+          console.log("not supporting ext float");
+        }
+        if (!ctx.oes_texture_float_linear) {
+          console.log("not supporting oes float");
+        }
+      } 
+      else {
+        document.getElementById("no-support").style.display = 'block';
+        return;
         ctx = canvas.getContext("webgl");
         ctx.getExtension("OES_texture_float");
       }
@@ -893,11 +1008,14 @@
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
 
+      fftProgram = createComputeProgram(gl, fftSource);
 
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
       disSearchProgram = createComputeProgram(gl, disSearchSource);
       disDensificationProgram = createRenderProgram(gl, disDensificationVertexShaderSource, disDensificationFragmentShaderSource);
       getFlowFromPartProgram = createComputeProgram(gl, getFlowFromPartSource);
+      getFlowFromPointProgram = createComputeProgram(gl, getFlowFromPointSource);
+      makeMaskFromPointsProgram = createComputeProgram(gl, makeMaskFromPointsSource);
 
     }
 
@@ -956,6 +1074,25 @@
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboChestFlowData);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, chestFlowData, gl.DYNAMIC_COPY);
 
+      gl.useProgram(disDensificationProgram);
+      vaoDensify = gl.createVertexArray();
+      gl.bindVertexArray(vaoDensify);
+
+      let arrDensify = new Int32Array(4 * 2);
+
+
+      var sparsePix_buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, sparsePix_buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, arrDensify, gl.STATIC_DRAW);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.sparsePix_buffer);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+
+      gl.bindVertexArray(null);
+
+
 
       gl.useProgram(renderPlottingProgram);
       vaoPlotting = gl.createVertexArray();
@@ -979,17 +1116,27 @@
       gl.vertex_location = vertex_location;
       gl.index_buffer = index_buffer;
 
+      gl.sparsePix_buffer = sparsePix_buffer;
+
 
 
       gl.vaoRender = vaoRender;
       gl.vaoSkeleton = vaoSkeleton;
       gl.vaoPlotting = vaoPlotting;
+      gl.vaoDensify = vaoDensify;
 
       gl.skeleton_buffer = skeleton_buffer;
 
 gl.ssboCheckData = ssboCheckData;
 gl.ssboChestFlowData = ssboChestFlowData;
 gl.ssboGraphX = ssboGraphX;
+
+gl.rndrLevel = rndrLevel;
+
+gl.renderColor = renderColor;
+gl.renderGrad = renderGrad;
+gl.renderFlow = renderFlow;
+
 
     } 
     
@@ -1001,20 +1148,21 @@ gl.ssboGraphX = ssboGraphX;
       var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
       var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
-      var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var gradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
+      var lastGradient_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var densify_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR);
+      var flow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
-      var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR);
+      var sparseFlow_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, numberOflevels, imageSize[0] / 4.0, imageSize[1] / 4.0, 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
 
       var render_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8UI, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
       var test_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
-      
+      var srcTex = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
+      var dstTex = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST);
 
 
 
@@ -1041,6 +1189,9 @@ gl.ssboGraphX = ssboGraphX;
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depthTexture, 0);
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, densify_texture, lvl);
         //gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, topFlow_texture, lvl);
+
+        const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+        console.log(`can ${status === gl.FRAMEBUFFER_COMPLETE ? "" : "NOT "}render to R32`);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -1095,6 +1246,14 @@ gl.ssboGraphX = ssboGraphX;
       }
       gl.mask_texture = mask_texture;
 
+      if (gl.srcTex != null) {
+        delTexture(gl, gl.srcTex);
+      }
+      gl.srcTex = srcTex;
+      if (gl.dstTex != null) {
+        delTexture(gl, gl.dstTex);
+      }
+      gl.dstTex = dstTex;
     }
 
     async function loadStream(deviceId) {

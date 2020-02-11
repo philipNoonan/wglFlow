@@ -14,6 +14,7 @@ uniform float normVal;
 layout(binding = 0) uniform highp sampler2D colorMap;
 
 layout(binding = 1, rgba32f) writeonly uniform highp image2D gradientMap;
+layout(binding = 2, rgba32f) writeonly uniform highp image2D srcTex;
 
 void main()
 {
@@ -53,5 +54,7 @@ void main()
 			  -(lesser * a02 + upper * a12 + lesser * a22);
 
 	imageStore(gradientMap, ivec2(gl_GlobalInvocationID.xy), vec4(sx * normVal, sy * normVal, 0, 0));
+	imageStore(srcTex, ivec2(gl_GlobalInvocationID.xy), vec4(luminance(texelFetch(colorMap, ivec2(pix.x, pix.y), level).xyz), 0, 0, 0));
+
 }
 `;

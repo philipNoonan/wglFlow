@@ -3,15 +3,12 @@ layout(local_size_x = 32, local_size_y = 32) in;
 
 layout(binding = 0) uniform highp sampler2D lastColorMap;
 layout(binding = 1) uniform highp sampler2D nextColorMap;
+layout(binding = 2) uniform highp sampler2D lastGradientMap;
+layout(binding = 3) uniform highp sampler2D flowMap;
+layout(binding = 4) uniform highp sampler2D lastFlowMap;
 
-layout(binding = 0, rgba32f) readonly uniform highp image2D lastGradientMap;
-layout(binding = 1, rgba32f) readonly uniform highp image2D flowMap;
 layout(binding = 2, rgba32f) writeonly uniform highp image2D sparseFlowMap;
-
 layout(binding = 3, rgba32f) writeonly uniform highp image2D flowToWipe;
-
-layout(binding = 4, rgba32f) readonly uniform highp image2D lastFlowMap;
-
 
 float luminance(vec3 color)
 {
@@ -63,8 +60,9 @@ void main()
 		for (int j = 0; j < int(patchSize); j++)
 		{
 			imageStore(flowToWipe, ivec2(pix) + ivec2(i, j), vec4(0.0f));
-			gradData[i][j] = -imageLoad(lastGradientMap, ivec2(pix) + ivec2(i, j)).xy;
-		
+			//gradData[i][j] = -imageLoad(lastGradientMap, ivec2(pix) + ivec2(i, j)).xy;
+			gradData[i][j] = -texelFetch(lastGradientMap, ivec2(pix) + ivec2(i, j), int(level)).xy;
+
 			H[0][0] += gradData[i][j].x * gradData[i][j].x;
 			H[1][1] += gradData[i][j].y * gradData[i][j].y;
 			H[0][1] += gradData[i][j].x * gradData[i][j].y;
@@ -90,11 +88,15 @@ void main()
 	
 	if (level == 5.0f)
 	{
-		initialFlow = imageLoad(lastFlowMap, pix);
+		//initialFlow = imageLoad(lastFlowMap, pix);
+		initialFlow = texelFetch(lastFlowMap, pix, int(level));
+
 	}
 	else
 	{
-		initialFlow = imageLoad(flowMap, pix / 2);
+		//initialFlow = imageLoad(flowMap, pix / 2);
+		initialFlow = texelFetch(flowMap, pix / 2, int(level) + 1);
+
 		initialFlow.xy *= denseTexSize;
 
 	}
@@ -165,8 +167,8 @@ void main()
         denseTexSize.x - newPatchCenter.x < -(patchSize * 0.5f) ||
         newPatchCenter.y < -(patchSize * 0.5f) ||
         denseTexSize.y - newPatchCenter.y < -(patchSize * 0.5f)) {
-            flow = initialFlow.xy;
-            meanDiff = firstMeanDiff;
+           // flow = initialFlow.xy;
+           // meanDiff = firstMeanDiff;
 	}
 	
 
@@ -183,20 +185,23 @@ void main()
 `;
 
 const disDensificationVertexShaderSource = `#version 310 es
-flat out vec4 flow;
+//flat out vec4 flow;
 
-layout(binding = 0, rgba32f) readonly uniform highp image2D sparseFlowMap;
-
+//layout(binding = 0, rgba32f) readonly uniform highp image2D sparseFlowMap;
+//layout(binding = 0) uniform highp sampler2D sparseFlowMap;
+in vec2 sV;
 uniform float level;
 uniform vec2 invDenseTexSize;
 uniform ivec2 sparseTexSize;
+
+flat out ivec2 sparseCoord;
 
 // using point sprites, we are going to splat at patch centers into the framebuffer which is set to blend whatever is already in the framebuffer
 void main()
 {
 	int idx = gl_VertexID;
 
-	ivec2 sparseCoord = ivec2(
+	sparseCoord = ivec2(
 		idx % sparseTexSize.x,
 		idx / sparseTexSize.x
 		);
@@ -208,7 +213,8 @@ void main()
 
 	gl_PointSize = 8.0f;
 
-	flow = imageLoad(sparseFlowMap, sparseCoord);
+	//flow = imageLoad(sparseFlowMap, sparseCoord);
+	//	flow = texelFetch(sparseFlowMap, sparseCoord, int(level));
 }
 `;
    
@@ -218,12 +224,14 @@ precision highp float;
 uniform float level;
 uniform vec2 invDenseTexSize;
 
-flat in vec4 flow; // flow.xy, meanDiff.z
+//flat in vec4 flow; // flow.xy, meanDiff.z
 
+flat in ivec2 sparseCoord;
 out vec4 flow_contribution;
 
-layout(binding = 0) uniform highp sampler2D lastImage;
-layout(binding = 1) uniform highp sampler2D nextImage;
+layout(binding = 1) uniform highp sampler2D sparseFlowMap;
+layout(binding = 2) uniform highp sampler2D lastImage;
+layout(binding = 3) uniform highp sampler2D nextImage;
 
 float uluminance(vec3 rgb)
 {
@@ -232,6 +240,7 @@ float uluminance(vec3 rgb)
 
 void main()
 {         
+	vec4 flow = vec4(texelFetch(sparseFlowMap, sparseCoord, int(level)));
 	float diff = uluminance(textureLod(lastImage, vec2(gl_FragCoord.xy) * invDenseTexSize, level).xyz) - uluminance(textureLod(nextImage, vec2(gl_FragCoord.xy * invDenseTexSize) + flow.xy, level).xyz);
 	diff -= flow.z;
 	float weight = 1.0f / max(abs(diff), 1.0f);
