@@ -277,7 +277,7 @@
     const y = event.clientY - rect.top;
     mouseClickPos[0] = (x / (canvas.width / 2));
     mouseClickPos[1] = y / (canvas.height - 240.0);
-    console.log("x: " + mouseClickPos[0] + " y: " + mouseClickPos[1]);
+    //console.log("x: " + mouseClickPos[0] + " y: " + mouseClickPos[1]);
 
 
   }
@@ -541,7 +541,8 @@
 
   var plottingBufferProgram;
 
-  var fftProgram;
+  var dft2DProgram;
+  var fft2DProgram;
 
   var copyImageProgram;
   var genMipMapProgram;
@@ -730,9 +731,12 @@
 
         //gl.newImage = 0;
 
-        doFFT(gl, -1);
+        // doDFT2D(gl, -1);
+        // doDFT2D(gl, 1);
 
-        //doFFT(gl, 1);
+        doFFT2D(gl, 1);
+
+        //doFFT2D(gl, -1);
 
       }
 
@@ -1008,7 +1012,8 @@
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
 
-      fftProgram = createComputeProgram(gl, fftSource);
+      dft2DProgram = createComputeProgram(gl, dft2DSource);
+      fft2DProgram = createComputeProgram(gl, fft2DSource);
 
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
       disSearchProgram = createComputeProgram(gl, disSearchSource);

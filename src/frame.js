@@ -122,8 +122,8 @@ function calcGradient(gl, level, width, height) {
 
 }
 
-function doFFT(gl, dir) {
-  gl.useProgram(fftProgram);
+function doDFT2D(gl, dir) {
+  gl.useProgram(dft2DProgram);
 
   let w = 640;
   let h = 480;
@@ -140,7 +140,7 @@ function doFFT(gl, dir) {
 
   gl.bindImageTexture(0, src, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
   gl.bindImageTexture(1, dst, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-  gl.uniform1i(gl.getUniformLocation(fftProgram, "hori"), 1);
+  gl.uniform1i(gl.getUniformLocation(dft2DProgram, "hori"), 1);
 
   gl.dispatchCompute(w / gw, w / gw, 1);
   gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
@@ -149,14 +149,66 @@ function doFFT(gl, dir) {
 
   gl.bindImageTexture(0, dst, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
   gl.bindImageTexture(1, src, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
-  gl.uniform1i(gl.getUniformLocation(fftProgram, "hori"), 0);
+  gl.uniform1i(gl.getUniformLocation(dft2DProgram, "hori"), 0);
 
   gl.dispatchCompute(w / gw, w / gw, 1);
   gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
+}
+
+function doFFT2D(gl, dir) {
+  gl.useProgram(fft2DProgram);
+
+  let w = 640;
+  let h = 480;
+  let gw = 16;
+
+  //if (dir == 1) {
+    src = gl.srcTex;
+    dst = gl.dstTex;
+  //}
+  //else if (dir == -1) {
+  //  src = gl.dstTex;
+  //  dst = gl.srcTex;
+  //}
+
+  let radix = Math.ceil(Math.sqrt(Math.min(h, w / 2.0)) - 1.0);
+
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "radix"), radix);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "dir"), dir);
 
 
+  gl.bindImageTexture(0, src, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
+  gl.bindImageTexture(1, dst, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "hori"), 1);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "pingpong"), 1);
 
+  gl.dispatchCompute(w / gw, w / gw, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  gl.bindImageTexture(0, dst, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
+  gl.bindImageTexture(1, src, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "hori"), 1);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "pingpong"), 0);
+
+  gl.dispatchCompute(w / gw, w / gw, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  gl.bindImageTexture(0, src, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
+  gl.bindImageTexture(1, dst, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "hori"), 0);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "pingpong"), 1);
+
+  gl.dispatchCompute(w / gw, w / gw, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+  gl.bindImageTexture(0, dst, 0, false, 0, gl.READ_ONLY,  gl.RGBA32F);
+  gl.bindImageTexture(1, src, 0, false, 0, gl.WRITE_ONLY, gl.RGBA32F);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "hori"), 0);
+  gl.uniform1i(gl.getUniformLocation(fft2DProgram, "pingpong"), 0);
+
+  gl.dispatchCompute(w / gw, w / gw, 1);
+  gl.memoryBarrier(gl.SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
 }
 

@@ -117,12 +117,16 @@ const fragmentShaderSource = `#version 310 es
 
     if (renderVert == 1)
     {
-        vec4 tempFFT = vec4(texture(dstTex, t));
+
+        ivec2 pix = ivec2(mod(floor(t_image)-vec2(17*17,0)+(17.0f*17.0f/2.0f),vec2(17*17)));
+        vec4 tempFFT = vec4(texelFetch(dstTex, pix, 0));
+
+        //vec4 tempFFT = vec4(texture(dstTex, t));
         //outColor = vec4(log(length(tempFFT.xy)) / log(480.0f*480.0f), 0, 0, 1);
         //outColor = vec4(log((tempFFT.xy)), 0, 1);
         //outColor = vec4(log(length(tempFFT.xy)) / log(480.0f*480.0f), 0, 0, 1);
-        outColor = vec4(length(tempFFT.xy) / 480.0f, 0, 0, 1);
-
+        //outColor = vec4(length(tempFFT.xy) / 480.0f, 0, 0, 1);
+        outColor = vec4(tempFFT.xy * 50.0f, 0, 1);
         //outColor = vec4(rainbow(atan(tempFFT.y,tempFFT.x) / pi + 0.5f), 1);        
         //outColor = vec4((tempFFT.xy / 480.0f) * 0.5f + 0.5f, 0.0, 1);        
 
