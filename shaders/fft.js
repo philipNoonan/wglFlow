@@ -79,6 +79,213 @@ void main()
 
 `;
 
+const dft1DSource = `#version 310 es
+
+layout(local_size_x = 32, local_size_y = 1) in;
+
+layout(std430, binding = 0) buffer graphXData
+{
+  vec2 data[];
+} graphXOutput;
+
+layout(std430, binding = 1) buffer dftData
+{
+  vec2 data[];
+} dftDataOutput;
+
+float tau = atan(1.0f)*8.0f;
+
+
+vec2 polar(float m, float a)
+{
+	return m*vec2(cos(a), sin(a));   
+}
+
+const float pi = 3.141592653589793f;
+
+vec2 cmul(vec2 a, vec2 b)
+{
+    return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+vec2 horizontalPass(in int point) 
+{
+
+    int bufferLength = 1024;
+
+    float w = float(point - bufferLength/2);
+    vec2 xw = vec2(0.0f);
+
+    for(int n = 0; n < bufferLength; n++)
+    {
+        float a = -(tau * w * float(n)) / float(bufferLength);
+
+        vec2 xn = vec2(graphXOutput.data[n].x, 0.0f);
+
+        xw += cmul(xn, polar(1.0f, a));
+    }
+
+    return xw;
+}
+
+
+
+void main()
+{
+    int point = int(gl_GlobalInvocationID.x);
+
+    vec2 outData = horizontalPass(point);
+
+    dftDataOutput.data[point] = outData;
+}
+
+`;
+
+
+const fft1DSource = `#version 310 es
+// https://www.shadertoy.com/view/4dGyWD
+
+
+layout(local_size_x = 32, local_size_y = 1) in;
+
+layout(std430, binding = 0) buffer graphXData
+{
+  vec2 data[];
+} graphXOutput;
+
+layout(std430, binding = 1) buffer dftData0
+{
+  vec2 data[];
+} dftDataOutput0;
+
+layout(std430, binding = 2) buffer dftData1
+{
+  vec2 data[];
+} dftDataOutput1;
+
+
+float tau = atan(1.0f)*8.0f;
+
+uniform int hori;
+uniform int pingpong;
+
+uniform int dir;
+
+uniform int radix;
+
+const float pi = 3.141592653589793f;
+
+#define margin ((floor(R.xy) - vec2(radix * radix * 2, radix * radix)) / 2.0f)
+#define W(i,n) cexp(vec2(0, 2.0f * pi * float(i)/float(n)))
+
+vec2 cmul(vec2 a, vec2 b)
+{
+    return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+vec2 cprod(vec2 a, vec2 b){
+    return mat2(a,-a.y,a.x) * b;
+}
+
+vec2 cis(float t){
+    return cos(t - vec2(0,pi/2.));
+}
+vec2 cexp(vec2 z) {
+    return exp(z.x)*cis(z.y);
+}
+
+
+void horizontalPassFirst(in int point) 
+{
+    if (point > (radix * radix))
+    {
+        return;
+    }
+
+    vec2 outVec = vec2(0);
+    
+    vec2 sum = vec2(0.0f);
+    int n = dir * point / radix;
+
+    for (int i = 0; i < 32; i++)
+    {
+        if (i >= radix)
+        {
+            break;
+        }
+        int k = point;
+        k = (k % radix) + i * radix;
+    
+        vec2 W = vec2(i * n, radix);
+
+        if (dir == 1) {
+            sum += cprod(vec2(graphXOutput.data[k].x, 0.0f),
+            W(i*n, radix) 
+           );
+        }
+        else if (dir == -1) {
+            sum += cprod(dftDataOutput1.data[k],
+            W(i*n, radix) 
+           );
+        }
+
+    }      
+    
+    outVec.xy = sum / float(radix);
+    outVec.xy = cprod(outVec.xy, W(dir * (point % radix) * (point / radix), radix * radix));
+
+    dftDataOutput0.data[point] = outVec;
+    
+}
+
+// read from dftDataOutput0
+// write to  dftDataOutput1
+void horizontalPassSecond(in int point)
+{
+    if (point > (radix * radix))
+    {
+        return;
+    }
+
+    vec2 outVec = vec2(0);
+    
+    vec2 sum = vec2(0.0f);
+    int n = dir * point / radix;
+
+    for (int i = 0; i < 32; i++) 
+    {
+        if (i >= radix) 
+        {
+            break;
+        }
+        int k = point;
+        k = (k % radix) * radix + i;
+        sum += cprod(dftDataOutput0.data[k],
+                     W(i * n, radix)
+                     );
+    }
+
+    outVec.xy = sum / float(radix);
+
+    dftDataOutput1.data[point] = outVec;
+
+}
+
+void main()
+{
+    int pt = int(gl_GlobalInvocationID.x);
+
+    if (pingpong == 1)
+    {
+        horizontalPassFirst(pt);
+    }
+    else if (pingpong == 0)
+    {
+        horizontalPassSecond(pt);
+    }
+}
+
+`;
 
 const fft2DSource = `#version 310 es
 // https://www.shadertoy.com/view/4dGyWD

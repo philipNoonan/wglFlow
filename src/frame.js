@@ -172,7 +172,7 @@ function doFFT2D(gl, dir) {
   //  dst = gl.srcTex;
   //}
 
-  let radix = Math.ceil(Math.sqrt(Math.min(h, w / 2.0)) - 1.0);
+  let radix = Math.ceil(Math.sqrt(Math.min(h, w)));
 
   gl.uniform1i(gl.getUniformLocation(fft2DProgram, "radix"), radix);
   gl.uniform1i(gl.getUniformLocation(fft2DProgram, "dir"), dir);

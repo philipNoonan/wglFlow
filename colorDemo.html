@@ -427,11 +427,15 @@
     this.resolution = '640x480';
     this.manVai = 'manual';
     this.radius = 50;
+    this.bmax = 20;
+    this.bmin = 0;
   };
 
   var spd = 10;
   var rndrLevel = 0;
   var radius = 50;
+  var bmin = 0;
+  var bmax = 20;
   var checkFramesFlag = true;
   var checkMPPMFlag = true;
 
@@ -463,6 +467,8 @@
   gui.add(param, 'saveToDisk').name('Save Respiration Data');
   var checkDetectMethod = gui.add(param, 'manVai', ['manual', 'bodyPose']);
   var radcont = gui.add(param, 'radius', 10, 255);
+  var bmincont = gui.add(param, 'bmin', 0, 100);
+  var bmaxcont = gui.add(param, 'bmax', 0, 100);
 
   spdcont.onChange(function(value) {
     spd = value;
@@ -480,13 +486,16 @@
     checkFramesFlag = value;
   });
 
+  bmincont.onChange(function(value) {
+    bmin = value;
+  });
+
+  bmaxcont.onChange(function(value) {
+    bmax = value;
+  });
+
   checkMutliPersonPartMap.onChange(function(value) {
     checkMPPMFlag = value;
-
-
-
-
-
 
   });
 
@@ -516,9 +525,13 @@
   checkDetectMethod.onChange(function(value) {
     if (value == 'manual') {
       usingManual = true;
+      usingBodyPose = false;
+
     }
     else if (value == 'bodyPose') {
       usingBodyPose = true;
+      usingManual = false;
+
     }
   });
 
@@ -541,8 +554,11 @@
 
   var plottingBufferProgram;
 
+  var dft1DProgram;
   var dft2DProgram;
+  var fft1DProgram;
   var fft2DProgram;
+
 
   var copyImageProgram;
   var genMipMapProgram;
@@ -755,6 +771,10 @@
         let scaledX = normalize(runningSum, runningMax, runningMin);
 
         uploadGraphPoints(gl, runningSum);
+        //doDFTonPoints(gl);
+        doFFTonPoints(gl, 1);
+        //doFFTonPoints(gl, -1);
+
       }
 
 
@@ -798,6 +818,9 @@
         let scaledX = normalize(runningSum, runningMax, runningMin);
 
         uploadGraphPoints(gl, runningSum);
+        //doDFTonPoints(gl);
+        //doDFTonPoints(gl);
+
         //uploadGraphPoints(gl, sumFlow[1]);
 
         //console.log(sumFlow[0], sumFlow[1]);
@@ -807,7 +830,7 @@
 
       }
 
-     render(gl, c.width, c.height, runningMax, runningMin);
+     render(gl, c.width, c.height, runningMax, runningMin, bmin, bmax);
 
      if (savingRespirationData == true) {
       //xhr.open("POST", "http://127.0.0.1:3000/test", true);
@@ -1012,7 +1035,9 @@
       
       plottingBufferProgram = createComputeProgram(gl, plottingBufferSource);  
 
+      dft1DProgram = createComputeProgram(gl, dft1DSource);
       dft2DProgram = createComputeProgram(gl, dft2DSource);
+      fft1DProgram = createComputeProgram(gl, fft1DSource);
       fft2DProgram = createComputeProgram(gl, fft2DSource);
 
       edgeDetectProgram = createComputeProgram(gl, edgeDetectSource);
@@ -1108,12 +1133,26 @@
       gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboGraphX);
       gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
 
+      var ssboDFT1D0 = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboDFT1D0);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+      var ssboDFT1D1 = gl.createBuffer();
+      gl.bindBuffer(gl.SHADER_STORAGE_BUFFER, ssboDFT1D1);
+      gl.bufferData(gl.SHADER_STORAGE_BUFFER, emptyGraphPoints, gl.DYNAMIC_COPY);
+
+
 
       gl.bindBuffer(gl.ARRAY_BUFFER, ssboGraphX);
       gl.enableVertexAttribArray(0);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
+      gl.bindBuffer(gl.ARRAY_BUFFER, ssboDFT1D1);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
       gl.bindVertexArray(null);
+
 
 
 
@@ -1135,6 +1174,8 @@
 gl.ssboCheckData = ssboCheckData;
 gl.ssboChestFlowData = ssboChestFlowData;
 gl.ssboGraphX = ssboGraphX;
+gl.ssboDFT1D0 = ssboDFT1D0;
+gl.ssboDFT1D1 = ssboDFT1D1;
 
 gl.rndrLevel = rndrLevel;
 
