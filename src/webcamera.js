@@ -1,11 +1,14 @@
-  let stream;
 
-  async function getColorStream(w, h) {
+  async function getColorStream(w, h, id) {
 
+    let stream;
 
     const constraints = {
       audio: false,
       video: {
+        deviceId: {
+          exact: id
+        },
         width: w,
         height: h,
         frameRate: {ideal: 30},
@@ -19,13 +22,27 @@
     }
 
     stream = await navigator.mediaDevices.getUserMedia(constraints);
-    // let track = stream.getVideoTracks()[0];
-    // if (track.label.indexOf("RealSense") == -1) {
-    //   throw new Error(chromeVersion() < 58 ?
-    //     "Your browser version is too old. Get Chrome version 58 or later." :
-    //     "No RealSense camera connected.");
-    // }
-    return stream;
+    let track = stream.getVideoTracks()[0];
+
+    if (track.label.includes('RGB') || track.label.includes('Webcam')) {
+      return [stream, 'color'];
+    }
+    else if (track.label.includes('Depth')) {
+      if (track.label.includes('435'))
+      {
+        return [stream, 'depth'];
+      }
+      else if (track.label.includes('415')) {
+        return [stream, 'depth'];
+      }
+    }
+    else {
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }      return [null, null];
+    }
   }
 
 

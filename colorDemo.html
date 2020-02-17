@@ -260,6 +260,11 @@
     target.innerHTML += `${message}<br>`;
   }
 
+
+
+
+
+
   var net;
   var poseNetLoaded = 0;
   var firstBodyPoseFound = 0;
@@ -392,6 +397,7 @@
 
   const videoToggle = document.getElementById("show-video-toggle");
 
+  var videoDevices = [];
 
   var frameCounter = 0;
   var runningSum = 0;
@@ -429,6 +435,18 @@
     this.radius = 50;
     this.bmax = 20;
     this.bmin = 0;
+    this.renderColorL = true;
+    this.renderDepthL = false;
+    this.renderFlowL = false;
+    this.renderGradL = false;
+    this.renderFreqL = false;
+    this.renderMaskL = false;
+    this.renderColorR = true;
+    this.renderDepthR = false;
+    this.renderFlowR = false;
+    this.renderGradR = false;
+    this.renderFreqR = false;
+    this.renderMaskR = false;
   };
 
   var spd = 10;
@@ -439,15 +457,44 @@
   var checkFramesFlag = true;
   var checkMPPMFlag = true;
 
-  var renderColor = true;
-  var renderGrad = false;
-  var renderFlow = true;
+  var renderOptsLeft = 1;
+  var renderOptsRight = 2;
+
+  function getRenderOpts(opts) {
+    return opts.renderColor << 0 | 
+    opts.renderDepth << 1 |
+    opts.renderFlow  << 2 |
+    opts.renderGrad  << 3 |
+    opts.renderFreq  << 4 |
+    opts.renderMask << 5 ;
+  }
+ 
+var renderRight = {
+  'renderColor' : true,
+  'renderGrad' : false,
+  'renderFlow' : true,
+  'renderDepth' : true,
+  'renderFreq' : false,
+  'renderMask' : false,
+};
+
+var renderLeft = {
+  'renderColor' : true,
+  'renderGrad' : false,
+  'renderFlow' : true,
+  'renderDepth' : true,
+  'renderFreq' : false,
+  'renderMask' : false,
+};
+
 
   var usingManual = true;
   var usingBodyPose = false;
 
   var gui = new dat.GUI();
   var param = new paramGUI();
+
+  var cameraSelection = [];
 
   var folderWebcam = gui.addFolder('Webcam');
   folderWebcam.add(param, 'useWebcam').name('Use Webcam');
@@ -461,6 +508,10 @@
   var checkFrames = gui.add(param, 'checkForNewFrames');
   var checkMutliPersonPartMap = gui.add(param, 'checkMPPM');
 
+
+
+
+
   var spdcont = gui.add(param, 'speed', 1, 20);
   var rndrcont = gui.add(param, 'renderLevel', 0, 6);
   gui.add(param, 'loadBP').name('Load BodyPix');
@@ -469,6 +520,73 @@
   var radcont = gui.add(param, 'radius', 10, 255);
   var bmincont = gui.add(param, 'bmin', 0, 100);
   var bmaxcont = gui.add(param, 'bmax', 0, 100);
+
+  var folderRenderLeft = gui.addFolder('Render Left');
+  var rndrColorL = folderRenderLeft.add(param, 'renderColorL');
+  var rndrDepthL = folderRenderLeft.add(param, 'renderDepthL');
+  var rndrFlowL  = folderRenderLeft.add(param, 'renderFlowL' );
+  var rndrGradL  = folderRenderLeft.add(param, 'renderGradL' );
+  var rndrFreqL  = folderRenderLeft.add(param, 'renderFreqL' );
+  var rndrMaskL  = folderRenderLeft.add(param, 'renderMaskL' );
+
+  var folderRenderRight = gui.addFolder('Render Right');
+  var rndrColorR = folderRenderRight.add(param, 'renderColorR');
+  var rndrDepthR = folderRenderRight.add(param, 'renderDepthR');
+  var rndrFlowR  = folderRenderRight.add(param, 'renderFlowR' );
+  var rndrGradR  = folderRenderRight.add(param, 'renderGradR' );
+  var rndrFreqR  = folderRenderRight.add(param, 'renderFreqR' );
+  var rndrMaskR  = folderRenderRight.add(param, 'renderMaskR' );
+
+  rndrColorL.onChange(function(value) {
+    renderLeft.renderColor = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+  rndrDepthL.onChange(function(value) {
+    renderLeft.renderDepth = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+  rndrFlowL.onChange(function(value) {
+    renderLeft.renderFlow = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });  
+  rndrGradL.onChange(function(value) {
+    renderLeft.renderGrad = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+  rndrFreqL.onChange(function(value) {
+    renderLeft.renderFreq = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+  rndrMaskL.onChange(function(value) {
+    renderLeft.renderMask = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+
+  rndrColorR.onChange(function(value) {
+    renderRight.renderColor = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
+  });
+  rndrDepthR.onChange(function(value) {
+    renderRight.renderDepth = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
+  });
+  rndrFlowR.onChange(function(value) {
+    renderRight.renderFlow = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
+  });  
+  rndrGradR.onChange(function(value) {
+    renderRight.renderGrad = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
+  });
+  rndrFreqR.onChange(function(value) {
+    renderRight.renderFreq = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
+  });
+  rndrMaskR.onChange(function(value) {
+    renderLeft.renderMask = value;
+    gl.renderOptsLeft = getRenderOpts(renderLeft);
+  });
+
 
   spdcont.onChange(function(value) {
     spd = value;
@@ -551,6 +669,7 @@
 
   var newImage = 1;
   var frameAvailableColor = false;
+  var frameAvailableDepth = false;
 
   var plottingBufferProgram;
 
@@ -649,21 +768,30 @@
 
       frameAvailableColor = false;
 
-      this.videoColor = this._createOffscreenVideo();
-      this.videoColor.oncanplay = _ => { frameAvailableColor = true; }
-      this.videoColor.addEventListener("play", this._frameLoop);
+      // this.videoColor = this._createOffscreenVideo();
+      // this.videoColor.oncanplay = _ => { frameAvailableColor = true; }
+      // this.videoColor.addEventListener("play", this._frameLoop);
 
-      let hasTouchListeners = false;
-      const onVideoTouchStart = _ => {
-        hasTouchListeners = false;
-        window.removeEventListener("touchstart", onVideoTouchStart, true);
-        this.videoColor.play();
-      }
+      // let hasTouchListeners = false;
+      // const onVideoTouchStart = _ => {
+      //   hasTouchListeners = false;
+      //   window.removeEventListener("touchstart", onVideoTouchStart, true);
+      //   this.videoColor.play();
+      // }
 
-      if (this.videoColor && this.videoColor.paused && !hasTouchListeners) {
-        hasTouchListeners = true;
-        window.addEventListener("touchstart", onVideoTouchStart, true);
-      }
+      // if (this.videoColor && this.videoColor.paused && !hasTouchListeners) {
+      //   hasTouchListeners = true;
+      //   window.addEventListener("touchstart", onVideoTouchStart, true);
+      // }
+
+      videos.color = this._createOffscreenVideo();
+      videos.color.oncanplay = _ => { frameAvailableColor = true; }
+
+      videos.depth = this._createOffscreenVideo();
+      videos.depth.oncanplay = _ => { frameAvailableDepth = true; }
+
+      videos.color.addEventListener("play", this._frameLoop); // fires when the color feed becomes available
+
     }
 
     function _createOffscreenVideo() {
@@ -676,9 +804,7 @@
       });
     }
     
-    // _frameLoopColor() {
 
-    // }
 
     async function _frameLoop() {
       stats.begin();
@@ -687,13 +813,13 @@
       gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
       if (poseNetLoaded == 1) {
-        getBodyPose(this.videoColor, net);
+        getBodyPose(videos.color, net);
       }
 
       if (videoLoaded == 0)
       {
         if (bodyPixLoaded == 1 && (frameCounter % Math.round(spd)) == 0 || Math.round(spd) <= 1) {
-          getBodyMap(this.videoColor, net, checkMPPMFlag)
+          getBodyMap(videos.color, net, checkMPPMFlag)
         }
       }
       else {
@@ -713,10 +839,15 @@
       if (frameAvailableColor) {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, this.videoColor);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, videos.color);
         gl.generateMipmap(gl.TEXTURE_2D);
+      }
 
-
+      if (frameAvailableDepth) { 
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RED, gl.FLOAT, videos.depth);
+        gl.generateMipmap(gl.TEXTURE_2D);
       }
 
       
@@ -1179,9 +1310,12 @@ gl.ssboDFT1D1 = ssboDFT1D1;
 
 gl.rndrLevel = rndrLevel;
 
-gl.renderColor = renderColor;
-gl.renderGrad = renderGrad;
-gl.renderFlow = renderFlow;
+gl.renderOptsLeft = renderOptsLeft;
+gl.renderOptsRight = renderOptsRight;
+
+// gl.renderColor = renderColor;
+// gl.renderGrad = renderGrad;
+// gl.renderFlow = renderFlow;
 
 
     } 
@@ -1190,6 +1324,9 @@ gl.renderFlow = renderFlow;
 
 
       var mask_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, 1, imageSize[0], imageSize[1], 1, gl.NEAREST, gl.NEAREST_MIPMAP_NEAREST);
+
+      var depth_texture = generateTexture(gl, gl.TEXTURE_2D, gl.R32F, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
+
 
       var color_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
       var lastColor_texture = generateTexture(gl, gl.TEXTURE_2D, gl.RGBA8, numberOflevels, imageSize[0], imageSize[1], 1, gl.LINEAR, gl.LINEAR_MIPMAP_NEAREST);
@@ -1255,6 +1392,12 @@ gl.renderFlow = renderFlow;
         delTexture(gl, gl.color_texture);
       }
       gl.color_texture = color_texture;
+
+      if (gl.depth_texture != null) {
+        delTexture(gl, gl.depth_texture);
+      }
+      gl.depth_texture = depth_texture;
+
       if (gl.lastColor_texture != null) {
         delTexture(gl, gl.lastColor_texture);
       }
@@ -1306,35 +1449,36 @@ gl.renderFlow = renderFlow;
       stopVideo(videos.color);
     
 
-      const getUserMediaColor = () => {
-        // add ?allow=all to URL to allow listing all devices (incl. those not supporting depth).
-        //if (!deviceId && (new URL(window.location)).searchParams.get("allow") !== "all") {
-          return getColorStream(imageSize[0], imageSize[1]);
-        //}
-
-        const constraints = {
-          video: {
-            deviceId: deviceId ? { exact: deviceId } : {}
-          }
-        }
-
-        return navigator.mediaDevices.getUserMediaColor(constraints);
-      }
+      // const getUserMediaColor = () => {
+      //   return getColorStream(imageSize[0], imageSize[1]);
+      // }
 
       try {
-        const streamColor = await getUserMediaColor();
-        this.videoColor.srcObject = streamColor;
-        this.videoColor.width = imageSize[0];
-        this.videoColor.height = imageSize[1];
-        videos.color = this.videoColor;
-        
+        // const streamColor = await getUserMediaColor();
+        const streamColor = await getColorStream(imageSize[0], imageSize[1], deviceId);
+
+        if (streamColor[1] == 'color') {
+          videos.color.srcObject = streamColor[0];
+          videos.color.width = imageSize[0];
+          videos.color.height = imageSize[1];
+          //videos.color = this.videoColor; 
+        }
+        else if (streamColor[1] == 'depth') {
+          videos.depth.srcObject = streamColor[0];
+          videos.depth.width = imageSize[0];
+          videos.depth.height = imageSize[1];
+          //videos.depth = this.videoDepth; 
+        }
+       
 
         //videos.color = this.videoDepth;
 
-        const tracksColor = streamColor.getVideoTracks()[0];
-        if (tracksColor.getSettings) {
-          this.colorDeviceId = tracksColor.getSettings().deviceId;
-        }
+        //const tracksColor = await getUserMediaColor(deviceID);//streamColor.getVideoTracks()[0];
+        // if (tracksColor.getSettings) {
+        //   this.colorDeviceId = tracksColor.getSettings().deviceId;
+        // }
+
+
 
       } catch (err) {
         console.error(err);
@@ -1388,6 +1532,22 @@ gl.renderFlow = renderFlow;
 
 
   function onLoad() {
+
+    navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        devices.forEach(function(device) {
+          console.log(device.kind + ": " + device.label +
+                      " id = " + device.deviceId);
+          if (device.kind == "videoinput") {
+            videoDevices.push(device.deviceId);
+            //loadStream(deviceId);
+          }
+        });
+      })
+      .catch(function(err) {
+        console.log(err.name + ": " + err.message);
+      });
+
     gl = this._configureGLContext();
     initGL(gl);
     setTextures(gl);
@@ -1395,32 +1555,49 @@ gl.renderFlow = renderFlow;
   }
 
 
-
   function loadWebcam() {
 
+    for (let i = 0; i < videoDevices.length; i++) {
+      loadStream(videoDevices[i])
+    }
+
+
+    // navigator.mediaDevices.enumerateDevices()
+    //   .then(function(devices) {
+    //     devices.forEach(function(device) {
+    //       console.log(device.kind + ": " + device.label +
+    //                   " id = " + device.deviceId);
+    //       if (device.kind == "videoinput") {
+    //         videoDevices.push(device.deviceId);
+    //         //loadStream(deviceId);
+    //       }
+    //     });
+    //   })
+    //   .catch(function(err) {
+    //     console.log(err.name + ": " + err.message);
+    //   });
 
 
 
+    // //const videoStreamEl = document.querySelector('video-stream');
+    // const selectEl = document.querySelector('#selectVideoDevice');
 
-    //const videoStreamEl = document.querySelector('video-stream');
-    const selectEl = document.querySelector('#selectVideoDevice');
+    // selectEl.onchange = async event => {
+    //   selectEl.disabled = true;
+    //   const deviceId = event.target.value;
 
-    selectEl.onchange = async event => {
-      selectEl.disabled = true;
-      const deviceId = event.target.value;
+    //   await loadStream(deviceId);
 
-      await loadStream(deviceId);
+    //   const devices = await navigator.mediaDevices.enumerateDevices();
+    //   populateSelectElement(devices);
+    //   // if (selectedtab.value != "basic") {
+    //   //   // It is on by default; stop rendering it if not visible.
+    //   //   stopBasicTab();
+    //   // }
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      populateSelectElement(devices);
-      // if (selectedtab.value != "basic") {
-      //   // It is on by default; stop rendering it if not visible.
-      //   stopBasicTab();
-      // }
-
-      selectEl.disabled = false;
-    };
-    selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
+    //   selectEl.disabled = false;
+    // };
+    // selectEl.dispatchEvent(new Event('change', { 'bubbles': true }))
   }
 </script>
 </html>

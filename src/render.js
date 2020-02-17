@@ -91,14 +91,9 @@ function render(gl, width, height, rmax, rmin, bmin, bmax) {
 	 gl.useProgram(renderProgram);
      gl.bindVertexArray(gl.vaoRender);
 
-    let renderOpts = 1 << 0 | 
-                       0 << 1 |
-                       0 << 2 |
-                       0 << 3 |
-                       0 << 4 |
-                       0 << 5;
 
-    gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
+
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), gl.renderOptsLeft);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), [imageSize[0] >> gl.rndrLevel, imageSize[1] >> gl.rndrLevel]);
 
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderLevel"), gl.rndrLevel);
@@ -130,14 +125,9 @@ function render(gl, width, height, rmax, rmin, bmin, bmax) {
 
     gl.viewport(width / 2.0, 240, width / 2.0, height - 240);
 
-    renderOpts = 0 << 0 | 
-                       0 << 1 |
-                       1 << 2 |
-                       0 << 3 |
-                       0 << 4 |
-                       1 << 5;
 
-    gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), renderOpts);
+
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "renderOptions"), gl.renderOptsRight);
     gl.uniform2fv(gl.getUniformLocation(renderProgram, "imageSize"), [imageSize[0] >> gl.rndrLevel, imageSize[1] >> gl.rndrLevel]);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "renderLevel"), gl.rndrLevel);
 
@@ -146,6 +136,7 @@ function render(gl, width, height, rmax, rmin, bmin, bmax) {
     gl.uniform1i(gl.getUniformLocation(renderProgram, "gradTex"), 2);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "flowTex"), 3);
     gl.uniform1i(gl.getUniformLocation(renderProgram, "dstTex"), 4);
+    gl.uniform1i(gl.getUniformLocation(renderProgram, "depthTex"), 5);
 
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, gl.mask_texture);
@@ -157,6 +148,8 @@ function render(gl, width, height, rmax, rmin, bmin, bmax) {
     gl.bindTexture(gl.TEXTURE_2D, gl.densify_texture);
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, gl.srcTex);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, gl.depth_texture);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, gl.vertex_buffer);
     gl.vertexAttribPointer(gl.vertex_location, 2, gl.FLOAT, false, 0, 0);

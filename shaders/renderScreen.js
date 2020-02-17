@@ -19,11 +19,20 @@ const fragmentShaderSource = `#version 310 es
     layout(binding = 2) uniform highp sampler2D gradTex;
     layout(binding = 3) uniform highp sampler2D flowTex;
     layout(binding = 4) uniform highp sampler2D dstTex;
+    layout(binding = 5) uniform highp sampler2D depthTex;
 
     uniform int renderLevel;
 
     float pi = atan(1.0f)*4.0f;
     float tau = atan(1.0f)*8.0f;
+
+    const vec3 maskColors[24] = vec3[](
+        vec3(110, 64, 170), vec3(143, 61, 178), vec3(178, 60, 178), vec3(210, 62, 167),
+        vec3(238, 67, 149), vec3(255, 78, 125), vec3(255, 94, 99),  vec3(255, 115, 75),
+        vec3(255, 140, 56), vec3(239, 167, 47), vec3(217, 194, 49), vec3(194, 219, 64),
+        vec3(175, 240, 91), vec3(135, 245, 87), vec3(96, 247, 96),  vec3(64, 243, 115),
+        vec3(40, 234, 141), vec3(28, 219, 169), vec3(26, 199, 194), vec3(33, 176, 213),
+        vec3(47, 150, 224), vec3(65, 125, 224), vec3(84, 101, 214), vec3(99, 81, 195));
 
     vec3 rainbow(float x)
     {
@@ -64,11 +73,12 @@ const fragmentShaderSource = `#version 310 es
     void main(){
     
     int renderColor = (renderOptions & 1);
-    int renderGrad = (renderOptions & 2) >> 1;
+    int renderDepth = (renderOptions & 2) >> 1;
     int renderFlow = (renderOptions & 4) >> 2;
-    int renderRefVert = (renderOptions & 8) >> 3;
-    int renderNorm = (renderOptions & 16) >> 4;
-    int renderVert = (renderOptions & 32) >> 5;
+    int renderGrad = (renderOptions & 8) >> 3;
+    int renderFreq = (renderOptions & 16) >> 4;
+    int renderMask = (renderOptions & 32) >> 5;
+
 
     if (renderColor == 1)
     {
@@ -115,7 +125,7 @@ const fragmentShaderSource = `#version 310 es
 
     }
 
-    if (renderVert == 1)
+    if (renderFreq == 1)
     {
 
         //ivec2 pix = ivec2(mod(floor(t_image)-vec2(17*17,0)+(17.0f*17.0f),vec2(17*17)));
@@ -129,6 +139,23 @@ const fragmentShaderSource = `#version 310 es
         outColor = vec4(tempFFT.xy * 20.0f, 0, 1);
         //outColor = vec4(rainbow(atan(tempFFT.y,tempFFT.x) / pi + 0.5f), 1);        
         //outColor = vec4((tempFFT.xy / 480.0f) * 0.5f + 0.5f, 0.0, 1);        
+
+    }
+
+    if (renderDepth == 1)
+    {
+        vec4 col = vec4(texture(depthTex, t, float(renderLevel)));
+
+        outColor = vec4(col.xxx * 10.0f, 1.0f);
+    }
+
+    if (renderMask == 1)
+    {
+        //outColor = vec4(0, 0, 0, 1);
+        vec4 mask = vec4(texture(maskMap, t));
+
+
+        outColor = vec4(maskColors[int(mask.x)] / 255.0f, 1);
 
     }
 }
