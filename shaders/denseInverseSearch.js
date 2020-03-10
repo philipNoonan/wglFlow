@@ -37,7 +37,7 @@ void main()
 
 	ivec2 pix = (pixSparse * ivec2(4, 4));
 
-	if (pix.x >= int(denseTexSize.x - patchSize) || pix.y >= int(denseTexSize.y - patchSize))
+	if (pix.x <= int(patchSize) || pix.y <= int(patchSize) || pix.x >= int(denseTexSize.x - (patchSize)) || pix.y >= int(denseTexSize.y - (patchSize)))
 	{
 		return;
 	}
@@ -95,7 +95,7 @@ void main()
 	else
 	{
 		//initialFlow = imageLoad(flowMap, pix / 2);
-		initialFlow = texelFetch(flowMap, pix / 2, int(level) + 1);
+		initialFlow = texelFetch(flowMap, ivec2(pix / 2) + 2, int(level) + 1);
 
 		initialFlow.xy *= denseTexSize;
 
@@ -167,8 +167,8 @@ void main()
         denseTexSize.x - newPatchCenter.x < -(patchSize * 0.5f) ||
         newPatchCenter.y < -(patchSize * 0.5f) ||
         denseTexSize.y - newPatchCenter.y < -(patchSize * 0.5f)) {
-           // flow = initialFlow.xy;
-           // meanDiff = firstMeanDiff;
+           flow = initialFlow.xy;
+           meanDiff = firstMeanDiff;
 	}
 	
 

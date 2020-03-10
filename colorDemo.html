@@ -185,6 +185,7 @@
 
   <input id="myInput" type="file" accept="video/*" style="visibility:hidden" />
 
+  <input id="myImageInput" type="file" accept="image/*" style="visibility:hidden" />
 
   <!-- <div id="tabcontainer"> -->
     <!-- <input id="tab1" type="radio" name="tabs" value="basic" checked="checked" data-ontaboff="stopBasicTab" data-ontabon="startBasicTab"/> -->
@@ -322,7 +323,7 @@
 
   async function loadBodyPix() {
     net = await bodyPix.load({
-      architecture: 'ResNet50',
+      architecture: 'MobileNetV1',
       outputStride: 16,
       multiplier: 1.0,
       quantBytes: 2
@@ -336,9 +337,9 @@
       const seggy = await net.segmentMultiPersonParts(image, {
       flipHorizontal: false,
       internalResolution: 'medium',
-      segmentationThreshold: 0.5,
+      segmentationThreshold: 0.3,
       maxDetections: 10,
-      scoreThreshold: 0.2,
+      scoreThreshold: 0.3,
       nmsRadius: 20,
       minKeypointScore: 0.3,
       refineSteps: 20
@@ -369,6 +370,8 @@
   let videos = {depth: null, color: null};
   var videoFF;
   var videoLoaded = 0;
+
+  var imageLoaded = 0;
 
   let selectedtab = tabs[0];
   for(let i = 0; i < tabs.length; i++) {
@@ -427,6 +430,10 @@
       document.querySelector('input').addEventListener('change', extractFrames, false);
       document.getElementById('myInput').click();
     };
+    this.loadImageFile = function() { 
+      document.querySelector('input').addEventListener('change', loadImageFrames, false);
+      document.getElementById('myImageInput').click();
+    };
     this.saveToDisk = function() {
       savingRespirationData = true;
     };
@@ -435,14 +442,14 @@
     this.radius = 50;
     this.bmax = 20;
     this.bmin = 0;
-    this.renderColorL = true;
+    this.renderColorL = false;
     this.renderDepthL = false;
     this.renderFlowL = false;
     this.renderGradL = false;
     this.renderFreqL = false;
-    this.renderMaskL = false;
-    this.renderColorR = true;
-    this.renderDepthR = false;
+    this.renderMaskL = true;
+    this.renderColorR = false;
+    this.renderDepthR = true;
     this.renderFlowR = false;
     this.renderGradR = false;
     this.renderFreqR = false;
@@ -469,23 +476,25 @@
     opts.renderMask << 5 ;
   }
  
+  var renderLeft = {
+  'renderColor' : false,
+  'renderGrad' : false,
+  'renderFlow' : false,
+  'renderDepth' : false,
+  'renderFreq' : false,
+  'renderMask' : true,
+};
+
+
 var renderRight = {
-  'renderColor' : true,
+  'renderColor' : false,
   'renderGrad' : false,
   'renderFlow' : true,
-  'renderDepth' : true,
+  'renderDepth' : false,
   'renderFreq' : false,
   'renderMask' : false,
 };
 
-var renderLeft = {
-  'renderColor' : true,
-  'renderGrad' : false,
-  'renderFlow' : true,
-  'renderDepth' : true,
-  'renderFreq' : false,
-  'renderMask' : false,
-};
 
 
   var usingManual = true;
@@ -503,6 +512,8 @@ var renderLeft = {
   
   var folderVideoFile = gui.addFolder('Video');
   folderVideoFile.add(param, 'loadFile').name('Load video file');
+  folderVideoFile.add(param, 'loadImageFile').name('Load image file');
+
   folderVideoFile.open();
 
   var checkFrames = gui.add(param, 'checkForNewFrames');
@@ -583,8 +594,8 @@ var renderLeft = {
     gl.renderOptsRight = getRenderOpts(renderRight);
   });
   rndrMaskR.onChange(function(value) {
-    renderLeft.renderMask = value;
-    gl.renderOptsLeft = getRenderOpts(renderLeft);
+    renderRight.renderMask = value;
+    gl.renderOptsRight = getRenderOpts(renderRight);
   });
 
 
@@ -705,6 +716,19 @@ var renderLeft = {
   function normalize(val, max, min) { return (val - min) / (max - min); }
 	function divup(a, b) { return (a % b != 0) ? (a / b + 1) : (a / b); }
 
+  function loadImageFrames() {
+    imageFF = new Image();
+    imageFF.src = URL.createObjectURL(this.files[0]);
+    imageFF.addEventListener('load', function() {
+      gl.imageFF = imageFF;
+      imageLoaded = 1;
+      imageSize = [imageFF.width, imageFF.height];
+      setTextures(gl);
+
+      _frameLoop();
+    });
+
+  }
 
   function extractFrames() {
     videoFF = document.createElement('video');
@@ -828,6 +852,10 @@ var renderLeft = {
         }
       }
 
+      if (imageLoaded == 1 && (frameCounter % Math.round(spd * 10)) == 0) {
+        getBodyMap(gl.imageFF, net, checkMPPMFlag)
+      }
+
 
       let c = document.getElementById("canvasGL");
 
@@ -855,6 +883,13 @@ var renderLeft = {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
         gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, videoFF);
+        gl.generateMipmap(gl.TEXTURE_2D);
+      }
+
+      if (imageLoaded == 1) {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, gl.color_texture);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, imageSize[0], imageSize[1], gl.RGBA, gl.UNSIGNED_BYTE, gl.imageFF);
         gl.generateMipmap(gl.TEXTURE_2D);
       }
 
@@ -994,7 +1029,7 @@ var renderLeft = {
             {
               skeleLines = [];
             const adjacentKeyPoints =
-            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.1);
+            posenet.getAdjacentKeyPoints(segmentation[person].pose.keypoints, 0.01);
             adjacentKeyPoints.forEach((keypoints) => {
               skeleLines.push(keypoints[0].position.x);
               skeleLines.push(keypoints[0].position.y);
@@ -1006,7 +1041,7 @@ var renderLeft = {
 
             for (let iter = 0; iter < segmentation[person].pose.keypoints.length; iter++)
             {
-              if (segmentation[person].pose.keypoints[iter].score < 0.1) {
+              if (segmentation[person].pose.keypoints[iter].score < 0.01) {
                 continue;
               }
               skelePoints.push(segmentation[person].pose.keypoints[iter].position.x);
@@ -1310,8 +1345,8 @@ gl.ssboDFT1D1 = ssboDFT1D1;
 
 gl.rndrLevel = rndrLevel;
 
-gl.renderOptsLeft = renderOptsLeft;
-gl.renderOptsRight = renderOptsRight;
+gl.renderOptsLeft = getRenderOpts(renderLeft);
+gl.renderOptsRight = getRenderOpts(renderRight);
 
 // gl.renderColor = renderColor;
 // gl.renderGrad = renderGrad;
